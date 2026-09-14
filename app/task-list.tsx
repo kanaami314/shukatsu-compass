@@ -1,0 +1,12 @@
+'use client';
+import {useState} from 'react';
+import {Checkbox} from '@/components/ui/checkbox';
+import {Tabs,TabsList,TabsTrigger} from '@/components/ui/tabs';
+import {ListChecks,CalendarDays} from 'lucide-react';
+import {RecordItem,taskDeadline} from '@/lib/model';
+export default function TaskList({tasks,companyName,agentName,onEdit,onToggle,busy,disabled}:{tasks:RecordItem[];companyName:(id:string)=>string;agentName:(id:string)=>string;onEdit:(r:RecordItem)=>void;onToggle:(r:RecordItem)=>void;busy:string;disabled:boolean}){
+ const [filter,setFilter]=useState('pending');const today=new Date().toLocaleDateString('sv-SE',{timeZone:'Asia/Tokyo'});
+ const overdue=(r:RecordItem)=>!r.data.done&&taskDeadline(r.data)<Date.now();
+ const filtered=tasks.filter(r=>filter==='all'||(filter==='done'?r.data.done:!r.data.done)).sort((a,b)=>Number(a.data.done)-Number(b.data.done)||taskDeadline(a.data)-taskDeadline(b.data));
+ return <><div className="stats">{[{label:'未完了',n:tasks.filter(t=>!t.data.done).length},{label:'期限超過',n:tasks.filter(overdue).length},{label:'今日が期限',n:tasks.filter(t=>!t.data.done&&t.data.dueDate===today).length},{label:'完了',n:tasks.filter(t=>t.data.done).length}].map(s=><article key={s.label}><div>{s.label}<ListChecks size={18}/></div><strong>{s.n}<small>件</small></strong></article>)}</div><section className="panel"><div className="panel-heading"><h2>やることリスト</h2><Tabs value={filter} onValueChange={setFilter}><TabsList><TabsTrigger value="pending">未完了</TabsTrigger><TabsTrigger value="done">完了</TabsTrigger><TabsTrigger value="all">すべて</TabsTrigger></TabsList></Tabs></div>{filtered.length?filtered.map(t=><div className={'task-row '+(t.data.done?'task-done':'')} key={t.id}><Checkbox aria-label={t.data.title+'を'+(t.data.done?'未完了に戻す':'完了にする')} checked={t.data.done} disabled={disabled||!!busy} onCheckedChange={()=>onToggle(t)}/><button className="task-detail" onClick={()=>onEdit(t)}><strong>{t.data.title}</strong><span>{t.data.companyId?companyName(t.data.companyId):t.data.agentId?agentName(t.data.agentId):'共通タスク'}</span></button><span className={'priority priority-'+t.data.priority}>優先度 {t.data.priority}</span><button className={'task-due '+(overdue(t)?'overdue':'')} onClick={()=>onEdit(t)}><CalendarDays size={16}/>{t.data.dueDate.replaceAll('-','/')} {t.data.dueTime||'終日'}{overdue(t)&&<b>期限超過</b>}</button></div>):<div className="task-empty"><ListChecks size={30}/><h3>{filter==='done'?'完了したタスクはありません':'表示するタスクはありません'}</h3><p>SPI受験や履歴書提出など、上の「タスクを追加」から期限と一緒に登録できます。</p></div>}</section></>;
+}
