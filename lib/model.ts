@@ -14,3 +14,25 @@ export function freeSlots(events:RecordItem[],date:string,duration:number,startH
  let cursor=start;const slots:number[][]=[];for(const [a,b] of busy){if(a-cursor>=duration*60000)slots.push([cursor,Math.min(a,end)]);cursor=Math.max(cursor,b)}if(end-cursor>=duration*60000)slots.push([cursor,end]);return slots;
 }
 
+export function availableDays(events:RecordItem[],from:string,to:string,duration:number,buffer=30,now=Date.now()){
+ const parseDay=(value:string)=>{
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value))throw new Error('開始日と終了日を入力してください。');
+  const time=Date.parse(value+'T00:00:00Z');
+  if(!Number.isFinite(time)||new Date(time).toISOString().slice(0,10)!==value)throw new Error('有効な日付を入力してください。');
+  return time;
+ };
+ const start=parseDay(from),end=parseDay(to),count=(end-start)/86400000+1;
+ if(count<1)throw new Error('終了日は開始日以降にしてください。');
+ if(count>93)throw new Error('検索期間は93日以内にしてください。');
+ if(!Number.isFinite(duration)||duration<=0||!Number.isFinite(buffer)||buffer<0)throw new Error('必要な時間と予定前後の余裕を確認してください。');
+ const days:{date:string;slots:number[][]}[]=[];
+ for(let time=start;time<=end;time+=86400000){
+  const date=new Date(time).toISOString().slice(0,10);
+  // Round today's next start up to the next 15-minute boundary in JST.
+  const earliest=Math.ceil(now/(15*60000))*15*60000;
+  const slots=freeSlots(events,date,duration,9,18,buffer).map(([a,b])=>[Math.max(a,earliest),b]).filter(([a,b])=>b-a>=duration*60000);
+  if(slots.length)days.push({date,slots});
+ }
+ return days;
+}
+
