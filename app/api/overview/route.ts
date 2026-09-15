@@ -1,23 +1,11 @@
+import {env} from 'cloudflare:workers';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
-import {companyMatchScore} from '@/lib/company-match';
-export async function GET(req:Request){
- if(!await getChatGPTUser())return Response.json({error:'ログインしてください'},{status:401});
- const q=new URL(req.url).searchParams.get('q')?.trim();
- if(!q||q.length>150)return Response.json({error:'企業名を入力してください'},{status:400});
- try{
-  const base='https://ja.wikipedia.org/w/api.php?format=json&';
-  const headers={'User-Agent':'ShukatsuCompass/1.0 (company reference lookup)'};
-  async function query(params:Record<string,string>){const r=await fetch(base+new URLSearchParams(params),{headers,signal:AbortSignal.timeout(10000)});if(!r.ok)throw new Error('Lookup unavailable');const body=await r.json() as any;if(body.error)throw new Error('Lookup unavailable');return body}
-  const name=q.replace(/株式会社|有限会社|合同会社/g,'').trim();
-  const exact=await query({action:'query',prop:'extracts|categories|pageprops',exintro:'1',explaintext:'1',exlimit:'max',cllimit:'max',redirects:'1',titles:name});
-  const exactPages=Object.values(exact.query?.pages||{}).filter((p:any)=>companyMatchScore(q,p)>0) as any[];
-  if(exactPages.length)return Response.json({candidates:exactPages.map(p=>({title:p.title,overview:(p.extract||'').slice(0,5000),source:'https://ja.wikipedia.org/?curid='+p.pageid,score:100}))});
-  const search=await query({action:'query',list:'search',srsearch:name,srlimit:'8'});
-  const ids=search.query?.search?.map((h:any)=>h.pageid).join('|');
-  if(!ids)return Response.json({error:'企業と確認できる候補が見つかりません。正式名称で検索するか、公式サイトを参照して入力してください。'},{status:404});
-  const detail=await query({action:'query',prop:'extracts|categories|pageprops',exintro:'1',explaintext:'1',exlimit:'max',cllimit:'max',pageids:ids});
-  const candidates=Object.values(detail.query?.pages||{}).map((p:any)=>({title:p.title,overview:(p.extract||'').slice(0,5000),source:'https://ja.wikipedia.org/?curid='+p.pageid,score:companyMatchScore(q,p)})).filter(c=>c.score>0).sort((a,b)=>b.score-a.score).slice(0,5);
-  if(!candidates.length)return Response.json({error:'企業名と記事の内容が一致する候補を確認できませんでした。誤取得を避けるため表示していません。正式名称で再検索するか、公式サイトを参照して入力してください。'},{status:404});
-  return Response.json({candidates});
- }catch{return Response.json({error:'候補を取得できませんでした。時間をおいて再検索するか、企業概要を手入力してください。'},{status:503})}
+import {officialOverview,OverviewError} from '@/lib/official-overview';
+const json=(b:unknown,status=200)=>Response.json(b,{status,headers:{'Cache-Control':'no-store'}});
+export async function POST(req:Request){
+ if(!await getChatGPTUser())return json({error:'ログインしてください。'},401);
+ if(req.headers.get('origin')&&req.headers.get('origin')!==new URL(req.url).origin)return json({error:'不正なリクエストです。'},403);
+ let q,url;try{const b:any=await req.json();q=b.q?.trim();url=b.url?.trim()||'';if(typeof q!=='string'||!q||q.length>150||typeof url!=='string'||url.length>2000)throw new Error()}catch{return json({error:'企業名とURLを確認してください。'},400)}
+ if(!env.GEMINI_API_KEY)return json({error:'企業概要の取得にはGemini APIキーの接続が必要です。'},503);
+ try{return json(await officialOverview(q,url,env.GEMINI_API_KEY,env.GEMINI_MODEL))}catch(e){return json({error:e instanceof OverviewError?e.message:'公式情報を取得できませんでした。時間をおいてお試しください。'},e instanceof OverviewError?e.status:503)}
 }

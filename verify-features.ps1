@@ -18,10 +18,4 @@ try {
  if($protected.StatusCode -ne 409){throw 'Agent relation deletion protection failed'}
  'Agent-only meeting, all-day event, task completion persistence, invalid relation and delete protection: passed.'
 } finally { $created.Reverse();foreach($id in $created){$null=Invoke-RestMethod "$base/api/records" -WebSession $testSession -Method Delete -ContentType 'application/json' -Body (@{id=$id}|ConvertTo-Json)} }
-foreach($q in @('ソニー','株式会社サイバーエージェント','桃太郎')){
- $r=Invoke-WebRequest ($base+'/api/overview?q='+[uri]::EscapeDataString($q)) -WebSession $testSession -SkipHttpErrorCheck
- $b=$r.Content|ConvertFrom-Json
- [pscustomobject]@{query=$q;status=$r.StatusCode;titles=($b.candidates.title -join ', ')}
- if($q -eq '桃太郎' -and $r.StatusCode -ne 404){throw 'Non-company query not rejected'}
- if($q -ne '桃太郎' -and $r.StatusCode -ne 200){throw 'Known company search failed'}
-}
+# Official overview validation is covered by node verify-overview.mjs.
