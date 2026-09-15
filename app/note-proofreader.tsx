@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {Sparkles,Loader2} from 'lucide-react';
+import NoteTextView from './note-text';
 import type {NoteText} from '@/lib/proofread';
 type Result=NoteText&{changes:string[]};
 export default function NoteProofreader({content,feeling,disabled,onApply}:{content:string;feeling:string;disabled:boolean;onApply:(v:NoteText)=>void}){
@@ -18,18 +19,18 @@ export default function NoteProofreader({content,feeling,disabled,onApply}:{cont
     finally{if(!c.signal.aborted)setBusy(false)}
   }
   return <section className="proofreading">
-    <h3><Sparkles size={17}/> AIで文章を整える</h3>
-    <p>聞いた内容と感想をGeminiへ送り、誤字や文章の流れを整えます。結果を確認してから採用できます。</p>
+    <h3><Sparkles size={17}/> AIでノートを再構成</h3>
+    <p>メモをテーマ別の見出しと箇条書きに整理し、文章全体を読み返しやすく書き直します。事実・感想・疑問は残し、結果を確認してから採用できます。</p>
     <p className="ai-privacy">無料枠では送信内容がGoogleのサービス改善に使われる場合があります。個人情報や非公開の情報を含めないでください。</p>
     {configured===false&&<p role="status">APIキーの接続待ちです。ノートの記入・保存は利用できます。</p>}
-    <button type="button" className="secondary" disabled={disabled||busy||configured!==true||(!content.trim()&&!feeling.trim())} onClick={run}>{busy?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {busy?'文章を整えています…':'AIで校正する'}</button>
+    <button type="button" className="secondary" disabled={disabled||busy||configured!==true||(!content.trim()&&!feeling.trim())} onClick={run}>{busy?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {busy?'構成を整理しています…':'構成から整える'}</button>
     {error&&<p role="alert" className="ai-error">{error}</p>}
     {comparison&&<div className="ai-result" aria-live="polite">
       <p>固有名詞・数字・感想が変わっていないか確認してください。</p>
-      {(['content','feeling'] as const).map(key=><div key={key}><h4>{key==='content'?'聞いた内容':'感じたこと'}</h4><div className="ai-compare"><div><span>原文</span><p>{comparison.original[key]||'（空欄）'}</p></div><div><span>校正案</span><p>{comparison.result[key]||'（空欄）'}</p></div></div></div>)}
+      {(['content','feeling'] as const).map(key=><div key={key}><h4>{key==='content'?'聞いた内容':'感じたこと'}</h4><div className="ai-compare"><div><span>原文</span><p>{comparison.original[key]||'（空欄）'}</p></div><div><span>再構成案</span><NoteTextView text={comparison.result[key]||'（空欄）'}/></div></div></div>)}
       {comparison.result.changes.length>0&&<details><summary>主な修正点</summary><ul>{comparison.result.changes.map((v,i)=><li key={i}>{v}</li>)}</ul></details>}
       {!applied&&!unchanged&&<p role="status">本文が変更されています。最新の本文でもう一度校正してください。</p>}
-      {applied?<><p role="status">編集欄に反映しました。「保存」で確定します。</p><button type="button" className="secondary" disabled={disabled||!canUndo} onClick={()=>{onApply(comparison.original);setApplied(false)}}>原文に戻す</button></>:<button type="button" className="primary" disabled={disabled||!unchanged} onClick={()=>{onApply({content:comparison.result.content,feeling:comparison.result.feeling});setApplied(true)}}>校正案を採用する</button>}
+      {applied?<><p role="status">編集欄に反映しました。「保存」で確定します。</p><button type="button" className="secondary" disabled={disabled||!canUndo} onClick={()=>{onApply(comparison.original);setApplied(false)}}>原文に戻す</button></>:<button type="button" className="primary" disabled={disabled||!unchanged} onClick={()=>{onApply({content:comparison.result.content,feeling:comparison.result.feeling});setApplied(true)}}>再構成案を採用する</button>}
     </div>}
   </section>
 }

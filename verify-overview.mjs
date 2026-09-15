@@ -14,7 +14,15 @@ for(const url of ['http://company.co.jp','https://127.0.0.1','https://localhost'
 const answer=()=>Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({candidates:[company]})}]},urlContextMetadata:meta}]});
 let count=0;
 const direct=await officialOverview(company.title,company.source,'test',undefined,async(url,options)=>{count++;assert.deepEqual(JSON.parse(options.body).tools,[{url_context:{}}]);return answer()});assert.equal(direct.candidates.length,1);assert.equal(count,1);
-let step=0;const search=await officialOverview(company.title,'','test',undefined,async(url,options)=>{step++;if(step===1){assert.equal(url,'https://api.tavily.com/search');const body=JSON.parse(options.body);assert.equal(body.search_depth,'basic');assert.equal(body.auto_parameters,false);assert.equal(options.headers.Authorization,'Bearer tavily-test');return Response.json({results:[{url:company.source}]})}return answer()},'tavily-test');assert.equal(step,2);assert.equal(search.candidates.length,1);
+let step=0;const search=await officialOverview(company.title,'','test',undefined,async(url,options)=>{step++;if(step===1){assert.equal(url,'https://api.tavily.com/search');const body=JSON.parse(options.body);assert.equal(body.search_depth,'basic');assert.equal(body.auto_parameters,false);assert.equal(options.headers.Authorization,'Bearer tavily-test');return Response.json({results:[{url:company.source}]})}if(step===2){assert.equal(url,'https://api.tavily.com/extract');return Response.json({results:[{url:company.source,raw_content:'テスト株式会社 システム開発 東京都'}]})}assert.deepEqual(JSON.parse(options.body).tools,[]);return answer()},'tavily-test');assert.equal(step,3);assert.equal(search.candidates.length,1);
 await assert.rejects(()=>officialOverview(company.title,'','test',undefined,async()=>new Response('',{status:432}),'tavily-test'),e=>e.status===429);
 await assert.rejects(()=>officialOverview(company.title,'','test',undefined,async()=>{throw new Error('must not call')}),e=>e.message.includes('Tavily'));
 console.log('Official URL verification, Tavily basic search, URL bypass and quota errors passed.');
+
+const {selectCompanyUrls}=await import('./.sites-runtime/test/official.mjs');
+assert.deepEqual(selectCompanyUrls('テスト株式会社',[{url:'https://other.co.jp/',title:'その他'},{url:'https://company.co.jp/about/',title:'テスト株式会社'},{url:'https://company.co.jp/',title:'テスト株式会社'}]),['https://company.co.jp/about/','https://company.co.jp/','https://other.co.jp/']);
+
+const {hasCompanyEvidence}=await import('./.sites-runtime/test/official.mjs');
+assert.equal(hasCompanyEvidence('理想科学工業株式会社','ЊTv zȊwHƊЁ RISO KAGAKU CORPORATION'),false);
+assert.equal(hasCompanyEvidence('理想科学工業株式会社','理想科学工業の製品を紹介します。'),true);
+assert.equal(hasCompanyEvidence('理想科学工業株式会社','理想テクノロジーズ株式会社'),false);
