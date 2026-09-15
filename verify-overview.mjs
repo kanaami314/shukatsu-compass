@@ -14,6 +14,7 @@ for(const url of ['http://company.co.jp','https://127.0.0.1','https://localhost'
 const answer=()=>Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({candidates:[company]})}]},urlContextMetadata:meta}]});
 let count=0;
 const direct=await officialOverview(company.title,company.source,'test',undefined,async(url,options)=>{count++;assert.deepEqual(JSON.parse(options.body).tools,[{url_context:{}}]);return answer()});assert.equal(direct.candidates.length,1);assert.equal(count,1);
-let step=0;const search=await officialOverview(company.title,'','test',undefined,async()=>{step++;return step===1?Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({urls:[company.source]})}]},groundingMetadata:{groundingChunks:[{web:{uri:company.source}}],searchEntryPoint:{renderedContent:'<div>Search</div>'}}}]}):answer()});assert.equal(step,2);assert.equal(search.searchHtml,'<div>Search</div>');
-await assert.rejects(()=>officialOverview(company.title,'','test',undefined,async()=>new Response('',{status:429})),e=>e.status===429);
-console.log('Official URL, company identity, retrieval evidence, direct/search flows and quota errors passed.');
+let step=0;const search=await officialOverview(company.title,'','test',undefined,async(url,options)=>{step++;if(step===1){assert.equal(url,'https://api.tavily.com/search');const body=JSON.parse(options.body);assert.equal(body.search_depth,'basic');assert.equal(body.auto_parameters,false);assert.equal(options.headers.Authorization,'Bearer tavily-test');return Response.json({results:[{url:company.source}]})}return answer()},'tavily-test');assert.equal(step,2);assert.equal(search.candidates.length,1);
+await assert.rejects(()=>officialOverview(company.title,'','test',undefined,async()=>new Response('',{status:432}),'tavily-test'),e=>e.status===429);
+await assert.rejects(()=>officialOverview(company.title,'','test',undefined,async()=>{throw new Error('must not call')}),e=>e.message.includes('Tavily'));
+console.log('Official URL verification, Tavily basic search, URL bypass and quota errors passed.');
