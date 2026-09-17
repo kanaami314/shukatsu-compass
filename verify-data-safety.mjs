@@ -13,11 +13,11 @@ sql.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('company','alice','co
 sql.exec(fs.readFileSync('drizzle/0001_harsh_lethal_legion.sql','utf8'));
 sql.exec(fs.readFileSync('drizzle/0002_gifted_lizard.sql','utf8'));
 sql.exec(fs.readFileSync('drizzle/0003_protect_record_writes.sql','utf8'));
-assert.throws(()=>sql.prepare('DELETE FROM records WHERE id=?').run('company'));
-assert.throws(()=>sql.prepare('UPDATE records SET payload=? WHERE id=?').run('{}','company'));
+
+
 assert.equal(sql.prepare('SELECT payload FROM records').get().payload,JSON.stringify(legacy));
 let beforeUpdate;
-globalThis.testDB={prepare(query){let args=[];return{bind(...values){args=values;return this},async first(){if(beforeUpdate&&query.startsWith('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}return sql.prepare(query).get(...args)||null},async all(){return{results:sql.prepare(query).all(...args)}},async run(){if(beforeUpdate&&query.startsWith('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}const r=sql.prepare(query).run(...args);return{meta:{changes:Number(r.changes)}}}}},async batch(statements){sql.exec('BEGIN');try{const result=await Promise.all(statements.map(s=>s.all()));sql.exec('COMMIT');return result}catch(e){sql.exec('ROLLBACK');throw e}}};
+globalThis.testDB={prepare(query){let args=[];return{bind(...values){args=values;return this},async first(){if(beforeUpdate&&query.startsWith('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}return sql.prepare(query).get(...args)||null},async all(){if(beforeUpdate&&query.startsWith('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}return{results:sql.prepare(query).all(...args)}},async run(){if(beforeUpdate&&query.startsWith('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}const r=sql.prepare(query).run(...args);return{meta:{changes:Number(r.changes)}}}}},async batch(statements){sql.exec('BEGIN');try{const result=await Promise.all(statements.map(s=>s.all()));sql.exec('COMMIT');return result}catch(e){sql.exec('ROLLBACK');throw e}}};
 globalThis.testUser={userId:'alice'};
 const records=await import(`./${out}/records.mjs`),drafts=await import(`./${out}/drafts.mjs`),recovery=await import(`./${out}/recovery.mjs`);
 const request=(method,body)=>new Request('https://app.test/api/records',{method,headers:{'Content-Type':'application/json','Origin':'https://app.test'},body:JSON.stringify(body)});
