@@ -28,3 +28,4 @@ body{margin:0;background:var(--background);color:var(--foreground);font-family:A
     font-size: max(16px, 1rem);
   }
 }
+.safety-toolbar{margin:0 0 22px;display:flex;flex-wrap:wrap;gap:12px}.draft-status{font-size:14px;line-height:1.8;color:#326b54;background:#eef8f1;padding:12px;border-radius:8px}.edit-fields{border:0;padding:0;margin:0;min-width:0;display:contents}.recovery-panel{max-width:800px!important}.recovery-panel h3{margin-top:20px;font-weight:700}.recovery-entry{border:1px solid #dce3ee;border-radius:8px;padding:16px;display:grid;gap:12px}.recovery-entry small{color:#65748a}.recovery-entry pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:300px;overflow:auto;font:inherit;font-size:14px;line-height:1.8}.recovery-entry summary{cursor:pointer}.recovery-entry button{justify-self:start}

@@ -8,6 +8,27 @@
       "when": 1789366237643,
       "tag": "0000_amused_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1789610497632,
+      "tag": "0001_harsh_lethal_legion",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789611393687,
+      "tag": "0002_gifted_lizard",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789611915213,
+      "tag": "0003_protect_record_writes",
+      "breakpoints": true
     }
   ]
 }

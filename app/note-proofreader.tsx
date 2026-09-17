@@ -4,7 +4,7 @@ import {Sparkles,Loader2} from 'lucide-react';
 import NoteTextView from './note-text';
 import type {NoteText} from '@/lib/proofread';
 type Result=NoteText&{changes:string[]};
-export default function NoteProofreader({content,feeling,disabled,onApply}:{content:string;feeling:string;disabled:boolean;onApply:(v:NoteText)=>void}){
+export default function NoteProofreader({content,feeling,disabled,onApply}:{content:string;feeling:string;disabled:boolean;onApply:(v:NoteText)=>void|boolean}){
   const [configured,setConfigured]=useState<boolean|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[comparison,setComparison]=useState<{original:NoteText;result:Result}|null>(null),[applied,setApplied]=useState(false);
   const controller=useRef<AbortController|null>(null);
   useEffect(()=>{const c=new AbortController();fetch('/api/proofread',{signal:c.signal}).then(async r=>{if(!r.ok)throw new Error();return r.json() as Promise<{configured:boolean}>}).then(b=>setConfigured(b.configured)).catch(()=>{if(!c.signal.aborted)setError('AIの接続状態を確認できません。ノートを開き直してください。')});return()=>{c.abort();controller.current?.abort()}},[]);
@@ -30,7 +30,7 @@ export default function NoteProofreader({content,feeling,disabled,onApply}:{cont
       {(['content','feeling'] as const).map(key=><div key={key}><h4>{key==='content'?'聞いた内容':'感じたこと'}</h4><div className="ai-compare"><div><span>原文</span><p>{comparison.original[key]||'（空欄）'}</p></div><div><span>再構成案</span><NoteTextView text={comparison.result[key]||'（空欄）'}/></div></div></div>)}
       {comparison.result.changes.length>0&&<details><summary>主な修正点</summary><ul>{comparison.result.changes.map((v,i)=><li key={i}>{v}</li>)}</ul></details>}
       {!applied&&!unchanged&&<p role="status">本文が変更されています。最新の本文でもう一度校正してください。</p>}
-      {applied?<><p role="status">編集欄に反映しました。「保存」で確定します。</p><button type="button" className="secondary" disabled={disabled||!canUndo} onClick={()=>{onApply(comparison.original);setApplied(false)}}>原文に戻す</button></>:<button type="button" className="primary" disabled={disabled||!unchanged} onClick={()=>{onApply({content:comparison.result.content,feeling:comparison.result.feeling});setApplied(true)}}>再構成案を採用する</button>}
+      {applied?<><p role="status">編集欄に反映しました。「保存」で確定します。</p><button type="button" className="secondary" disabled={disabled||!canUndo} onClick={()=>{if(onApply(comparison.original)!==false)setApplied(false)}}>原文に戻す</button></>:<button type="button" className="primary" disabled={disabled||!unchanged} onClick={()=>{if(onApply({content:comparison.result.content,feeling:comparison.result.feeling})!==false)setApplied(true)}}>再構成案を採用する</button>}
     </div>}
   </section>
 }

@@ -9,7 +9,7 @@ export const schemas={
  event:z.object({companyId:z.string(),agentId:z.string().default(''),allDay:z.boolean().default(false),title:z.string().trim().min(1).max(150),start:z.string().datetime({offset:true}),end:z.string().datetime({offset:true}),place:z.string().max(1000),memo:z.string().max(5000)}).refine(v=>new Date(v.end)>new Date(v.start),'終了日時は開始日時より後にしてください').refine(v=>!(v.companyId&&v.agentId),'企業とエージェントはどちらか一方を選択してください').refine(v=>!v.allDay||([v.start,v.end].every(t=>(Date.parse(t)+9*3600000)%86400000===0)),'終日予定は日本時間の日付で指定してください')
 };
 export type Kind=keyof typeof schemas;
-export type RecordItem={id:string;kind:Kind;data:any};
+export type RecordItem={id:string;kind:Kind;data:any;revision?:number};
 export function freeSlots(events:RecordItem[],date:string,duration:number,startHour=9,endHour=20,buffer=30){
  const start=new Date(`${date}T${String(startHour).padStart(2,'0')}:00:00+09:00`).getTime(),end=new Date(`${date}T${String(endHour).padStart(2,'0')}:00:00+09:00`).getTime();
  const busy=events.map(e=>[Date.parse(e.data.start)-(e.data.allDay?0:buffer*60000),Date.parse(e.data.end)+(e.data.allDay?0:buffer*60000)]).filter(([a,b])=>a<end&&b>start).sort((a,b)=>a[0]-b[0]);

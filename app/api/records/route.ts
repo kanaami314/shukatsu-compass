@@ -1,7 +1,48 @@
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { storage } from '@/lib/storage';
 import { schemas,Kind } from '@/lib/model';
-export async function GET(){const user=await getChatGPTUser();if(!user)return Response.json({error:'ログインしてください'},{status:401});try{const rows=await storage().prepare('SELECT id,kind,payload FROM records WHERE owner = ?').bind(user.userId).all();return Response.json({records:rows.results.map((r:any)=>({id:r.id,kind:r.kind,data:JSON.parse(r.payload)}))})}catch(e){console.error(e);return Response.json({error:'データを読み込めません。時間をおいて再読み込みしてください。'},{status:503})}}
-export async function POST(req:Request){const user=await getChatGPTUser();if(!user)return Response.json({error:'ログインしてください'},{status:401});if(req.headers.get('origin')&&req.headers.get('origin')!==new URL(req.url).origin)return Response.json({error:'不正なリクエストです'},{status:403});try{const body:any=await req.json();const kind=body.kind as Kind;if(!Object.hasOwn(schemas,kind))return Response.json({error:'種類が不正です'},{status:400});const result=schemas[kind].safeParse(body.data);if(!result.success)return Response.json({error:result.error.issues.map(i=>i.message).join(' / ')},{status:400});const db=storage();const data=result.data as any;const refs:{id:string;kind:string}[]=[];if(data.companyId)refs.push({id:data.companyId,kind:'company'});if(data.agentId)refs.push({id:data.agentId,kind:'agent'});for(const ref of refs){const parent=await db.prepare('SELECT id FROM records WHERE id = ? AND owner = ? AND kind = ?').bind(ref.id,user.userId,ref.kind).first();if(!parent)return Response.json({error:'関連する企業・エージェントが見つかりません'},{status:400})}const id=body.id||crypto.randomUUID();if(typeof id!=='string'||id.length>100)return Response.json({error:'IDが不正です'},{status:400});if(body.id){const existing=await db.prepare('SELECT kind FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).first();if(!existing||existing.kind!==kind)return Response.json({error:'記録が見つかりません'},{status:404});await db.prepare('UPDATE records SET payload = ? WHERE id = ? AND owner = ?').bind(JSON.stringify(data),id,user.userId).run()}else await db.prepare('INSERT INTO records (id, owner, kind, payload) VALUES (?, ?, ?, ?)').bind(id,user.userId,kind,JSON.stringify(data)).run();return Response.json({record:{id,kind,data}})}catch(e){console.error(e);return Response.json({error:'保存できませんでした。入力を残したまま再試行できます。'},{status:503})}}
-export async function DELETE(req:Request){const user=await getChatGPTUser();if(!user)return Response.json({error:'ログインしてください'},{status:401});if(req.headers.get('origin')&&req.headers.get('origin')!==new URL(req.url).origin)return Response.json({error:'不正なリクエストです'},{status:403});try{const {id}=await req.json() as {id:string};const db=storage();const children=await db.prepare("SELECT id FROM records WHERE owner = ? AND (json_extract(payload, '$.companyId') = ? OR json_extract(payload, '$.agentId') = ?)").bind(user.userId,id,id).first();if(children)return Response.json({error:'関連する予定・タスク・ノート・企業があります。先に関連付けを変更または削除してください。'},{status:409});await db.prepare('DELETE FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).run();return Response.json({ok:true})}catch(e){console.error(e);return Response.json({error:'削除できませんでした'},{status:503})}}
-
+const response=(body:any,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
+const record=(r:any)=>({id:r.id,kind:r.kind,data:JSON.parse(r.payload),revision:r.revision});
+const conflict=()=>response({error:'別の画面で変更または削除されています。上書きせず入力を下書きに残しました。下書きを閉じて最新の記録を確認してください。'},409);
+export async function GET(){
+ const user=await getChatGPTUser();if(!user)return response({error:'ログインしてください'},401);
+ try{const rows=await storage().prepare('SELECT * FROM records WHERE owner = ? AND deleted = 0').bind(user.userId).all();return response({owner:user.userId,records:rows.results.map(record)})}
+ catch(e){console.error(e);return response({error:'データを読み込めません。時間をおいて再読み込みしてください。'},503)}
+}
+export async function POST(req:Request){
+ const user=await getChatGPTUser();if(!user)return response({error:'ログインしてください'},401);
+ if(req.headers.get('origin')&&req.headers.get('origin')!==new URL(req.url).origin)return response({error:'不正なリクエストです'},403);
+ try{
+  const body:any=await req.json(),kind=body.kind as Kind;if(body.owner&&body.owner!==user.userId)return response({error:'ログイン先が変わりました。元のアカウントで開き直してください。'},409);
+  if(!Object.hasOwn(schemas,kind))return response({error:'種類が不正です'},400);
+  const result=schemas[kind].safeParse(body.data);if(!result.success)return response({error:result.error.issues.map(i=>i.message).join(' / ')},400);
+  const db=storage(),data=result.data as any,payload=JSON.stringify(data),id=body.id||body.createId;
+  if(typeof id!=='string'||!id||id.length>100)return response({error:'画面を更新して下書きから再開してください。'},400);
+  for(const [key,refKind] of [['companyId','company'],['agentId','agent']]){
+   if(data[key]&&!await db.prepare('SELECT id FROM records WHERE id = ? AND owner = ? AND kind = ? AND deleted = 0').bind(data[key],user.userId,refKind).first())return response({error:'関連する企業・エージェントが見つかりません。先に復元または関連付けを変更してください。'},400);
+  }
+  const existing:any=await db.prepare('SELECT * FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).first();
+  if(existing){
+   if(existing.kind!==kind)return conflict();
+   if(!existing.deleted&&existing.payload===payload)return response({record:record(existing)});
+   if(!body.id||!Number.isInteger(body.revision)||body.revision!==existing.revision||(!body.restore&&existing.deleted))return conflict();
+   const changed=await db.prepare('UPDATE records SET payload = ?, revision = revision + 1, deleted = 0 WHERE id = ? AND owner = ? AND revision = ? RETURNING id').bind(payload,id,user.userId,body.revision).first();
+   if(!changed)return conflict();
+   return response({record:{id,kind,data,revision:body.revision+1}});
+  }
+  if(body.id)return conflict();
+  await db.prepare('INSERT INTO records (id, owner, kind, payload) VALUES (?, ?, ?, ?)').bind(id,user.userId,kind,payload).run();
+  return response({record:{id,kind,data,revision:1}});
+ }catch(e){console.error(e);return response({error:'保存を確認できませんでした。入力は残っています。そのまま再試行できます。'},503)}
+}
+export async function DELETE(req:Request){
+ const user=await getChatGPTUser();if(!user)return response({error:'ログインしてください'},401);
+ if(req.headers.get('origin')&&req.headers.get('origin')!==new URL(req.url).origin)return response({error:'不正なリクエストです'},403);
+ try{
+  const {id,revision,owner}=await req.json() as any;if(owner&&owner!==user.userId)return conflict();if(typeof id!=='string'||!Number.isInteger(revision))return conflict();
+  const db=storage();
+  const changed=await db.prepare("UPDATE records SET deleted = 1, revision = revision + 1 WHERE id = ? AND owner = ? AND revision = ? AND deleted = 0 AND NOT EXISTS (SELECT 1 FROM records c WHERE c.owner = ? AND c.deleted = 0 AND (json_extract(c.payload, '$.companyId') = ? OR json_extract(c.payload, '$.agentId') = ?)) RETURNING id").bind(id,user.userId,revision,user.userId,id,id).first();
+  if(!changed)return response({error:'記録が更新済み、または関連する記録があります。最新の状態を確認してください。'},409);
+  return response({ok:true});
+ }catch(e){console.error(e);return response({error:'削除を確認できませんでした。最新の一覧を確認してください。'},503)}
+}
