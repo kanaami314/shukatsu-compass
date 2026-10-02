@@ -1,3 +1,4 @@
+import {isExpired} from '@/lib/retention-time';
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {Draft,draftPrefix,writeLocalDraft,readLocalDrafts,mergeDrafts} from '@/lib/draft-storage';
@@ -26,9 +27,10 @@ export default function useProtectedEditor(owner:string){
   if(busy.current||!ownerRef.current)return;busy.current=true;
   try{for(const [id,d] of [...pending.current]){
    try{
+    if(isExpired(d.updatedAt)){pending.current.delete(id);continue}
     const r=await fetch('/api/drafts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...d,owner:ownerRef.current}),signal:AbortSignal.timeout(15000)}),b:any=await r.json();
     if(!pending.current.has(id))continue;
-    if(!r.ok){if(b.code==='DRAFT_ARCHIVED')pending.current.delete(id);throw new Error(b.error||'下書きを同期できませんでした。')}
+    if(!r.ok){if(b.code==='DRAFT_ARCHIVED'||b.code==='DRAFT_EXPIRED')pending.current.delete(id);throw new Error(b.error||'下書きを同期できませんでした。')}
     if(pending.current.get(id)?.seq===d.seq)pending.current.delete(id);
     setCloudError('');
     if(current.current?.draftId===id&&current.current.seq===d.seq)setStatus('下書きをクラウドに保存しました。');
@@ -38,8 +40,8 @@ export default function useProtectedEditor(owner:string){
  async function refresh(){
   if(!owner)return;let local:Draft[]=[];
   try{local=readLocalDrafts(localStorage,owner)}catch{setCloudError('端末の下書きを読み込めません。保存領域を消去せず、入力をファイルに退避してください。')}
-  setDrafts(v=>mergeDrafts(local,v));
-  try{const r=await fetch('/api/drafts',{cache:'no-store'}),b:any=await r.json();if(!r.ok)throw new Error(b.error);setDrafts(v=>mergeDrafts(mergeDrafts(local,b.drafts),v));for(const d of local){if((pending.current.get(d.draftId)?.seq||0)<d.seq)pending.current.set(d.draftId,d)}}catch{setCloudError('クラウドの下書きを読み込めません。端末に残っている下書きは利用できます。')}
+  setDrafts(v=>mergeDrafts(local,v.filter(d=>!isExpired(d.updatedAt))));
+  try{const r=await fetch('/api/drafts',{cache:'no-store'}),b:any=await r.json();if(!r.ok)throw new Error(b.error);setDrafts(v=>mergeDrafts(mergeDrafts(local,b.drafts),v.filter(d=>!isExpired(d.updatedAt))));for(const d of local){if((pending.current.get(d.draftId)?.seq||0)<d.seq)pending.current.set(d.draftId,d)}}catch{setCloudError('クラウドの下書きを読み込めません。端末に残っている下書きは利用できます。')}
  }
  useEffect(()=>{refresh();const timer=setInterval(sync,1500);const flush=()=>{void sync()};window.addEventListener('online',flush);return()=>{clearInterval(timer);window.removeEventListener('online',flush)}},[owner]);
  useEffect(()=>{

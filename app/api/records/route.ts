@@ -25,12 +25,12 @@ export async function POST(req:Request){
   }
   const existing:any=await db.prepare('SELECT * FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).first();
   if(existing){
-   if(existing.kind!==kind)return conflict();
+   if(existing.kind!==kind||existing.deleted===2)return conflict();
    // Older tabs and restored drafts must not erase newly introduced company fields.
    if(kind==='company'){const previous=JSON.parse(existing.payload);for(const key of ['interestScore','applicationCategory'])if(!Object.hasOwn(body.data,key)&&Object.hasOwn(previous,key))data[key]=previous[key];payload=JSON.stringify(data)}
    if(!existing.deleted&&existing.payload===payload)return response({record:record(existing)});
    if(!body.id||!Number.isInteger(body.revision)||body.revision!==existing.revision||(!body.restore&&existing.deleted))return conflict();
-   const results=await db.batch([archive(db,id,user.userId,body.revision,existing.payload),db.prepare('UPDATE records SET payload = ?, revision = revision + 1, deleted = 0 WHERE id = ? AND owner = ? AND revision = ? AND payload = ? AND '+refGuard+' RETURNING id').bind(payload,id,user.userId,body.revision,existing.payload,data.companyId||'',data.companyId||'',user.userId,data.agentId||'',data.agentId||'',user.userId)]);
+   const results=await db.batch([archive(db,id,user.userId,body.revision,existing.payload),db.prepare('UPDATE records SET payload = ?, revision = revision + 1, deleted = 0, deleted_at = NULL WHERE id = ? AND owner = ? AND revision = ? AND payload = ? AND '+refGuard+' RETURNING id').bind(payload,id,user.userId,body.revision,existing.payload,data.companyId||'',data.companyId||'',user.userId,data.agentId||'',data.agentId||'',user.userId)]);
    if(!results[1].results.length)return conflict();
    return response({record:{id,kind,data,revision:body.revision+1}});
   }
@@ -45,7 +45,7 @@ export async function DELETE(req:Request){
  try{
   const {id,revision,owner}=await req.json() as any;if(owner&&owner!==user.userId)return conflict();if(typeof id!=='string'||!Number.isInteger(revision))return conflict();
   const db=storage();const existing:any=await db.prepare('SELECT * FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).first();if(!existing||existing.revision!==revision)return conflict();
-  const results=await db.batch([archive(db,id,user.userId,revision,existing.payload),db.prepare("UPDATE records SET deleted = 1, revision = revision + 1 WHERE id = ? AND owner = ? AND revision = ? AND payload = ? AND deleted = 0 AND NOT EXISTS (SELECT 1 FROM records c WHERE c.owner = ? AND c.deleted = 0 AND (json_extract(c.payload, '$.companyId') = ? OR json_extract(c.payload, '$.agentId') = ?)) RETURNING id").bind(id,user.userId,revision,existing.payload,user.userId,id,id)]);
+  const results=await db.batch([archive(db,id,user.userId,revision,existing.payload),db.prepare("UPDATE records SET deleted = 1, deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ','now'), revision = revision + 1 WHERE id = ? AND owner = ? AND revision = ? AND payload = ? AND deleted = 0 AND NOT EXISTS (SELECT 1 FROM records c WHERE c.owner = ? AND c.deleted = 0 AND (json_extract(c.payload, '$.companyId') = ? OR json_extract(c.payload, '$.agentId') = ?)) RETURNING id").bind(id,user.userId,revision,existing.payload,user.userId,id,id)]);
   if(!results[1].results.length)return response({error:'記録が更新済み、または関連する記録があります。最新の状態を確認してください。'},409);
   return response({ok:true});
  }catch(e){console.error(e);return response({error:'削除を確認できませんでした。最新の一覧を確認してください。'},503)}

@@ -1,8 +1,10 @@
+import {cleanupExpired} from '@/lib/retention';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {storage} from '@/lib/storage';
 export async function GET(req:Request){
  const user=await getChatGPTUser();if(!user)return Response.json({error:'ログインしてください'},{status:401});
  try{
+  await cleanupExpired(user.userId);
   const offset=Math.max(0,Math.min(10000000,Number(new URL(req.url).searchParams.get('offset'))||0));
   const db=storage();const [history,deleted,draftHistory]=await db.batch([
    db.prepare('SELECT h.*, r.revision AS current_revision FROM record_history h JOIN records r ON h.record_id = r.id AND h.owner = r.owner WHERE h.owner = ? ORDER BY h.saved_at DESC, h.id LIMIT 100 OFFSET ?').bind(user.userId,offset),

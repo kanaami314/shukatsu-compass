@@ -4,15 +4,15 @@ import ts from 'typescript';
 import {DatabaseSync} from 'node:sqlite';
 const out='.sites-runtime/safety-tests';fs.mkdirSync(out,{recursive:true});
 function compile(source,name,replacements=[]){let code=fs.readFileSync(source,'utf8');for(const [a,b] of replacements)code=code.replaceAll(a,b);fs.writeFileSync(`${out}/${name}.mjs`,ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText)}
-compile('lib/model.ts','model');compile('lib/draft-storage.ts','draft-storage');
-fs.writeFileSync(`${out}/deps.mjs`,'export const getChatGPTUser=async()=>globalThis.testUser; export const storage=()=>globalThis.testDB;');
-for(const name of ['records','drafts','recovery'])compile(`app/api/${name}/route.ts`,name,[["@/app/chatgpt-auth","./deps.mjs"],["@/lib/storage","./deps.mjs"],["@/lib/model","./model.mjs"]]);
+compile('lib/model.ts','model');compile('lib/retention-time.ts','retention-time');compile('lib/retention.ts','retention',[["'./storage'","'./deps.mjs'"],["'./retention-time'","'./retention-time.mjs'"]]);compile('lib/draft-storage.ts','draft-storage',[["'./retention-time'","'./retention-time.mjs'"]]);
+fs.writeFileSync(`${out}/deps.mjs`,'export const getChatGPTUser=async()=>globalThis.testUser; export const storage=()=>globalThis.testDB; export const serviceOwner=async()=>null;');
+for(const name of ['records','drafts','recovery','backup'])compile(`app/api/${name}/route.ts`,name,[["@/app/chatgpt-auth","./deps.mjs"],["@/lib/storage","./deps.mjs"],["@/lib/model","./model.mjs"],["@/lib/retention-time","./retention-time.mjs"],["@/lib/retention","./retention.mjs"],["@/lib/service-auth","./deps.mjs"]]);
 const sql=new DatabaseSync(':memory:');sql.exec(fs.readFileSync('drizzle/0000_amused_darkhawk.sql','utf8'));
 const legacy={name:'元の企業',industry:'IT',status:'説明会',priority:'中',agentId:'',overview:'原文そのまま',url:'',source:''};
 sql.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('company','alice','company',JSON.stringify(legacy));
 sql.exec(fs.readFileSync('drizzle/0001_harsh_lethal_legion.sql','utf8'));
 sql.exec(fs.readFileSync('drizzle/0002_gifted_lizard.sql','utf8'));
-sql.exec(fs.readFileSync('drizzle/0003_protect_record_writes.sql','utf8'));
+sql.exec(fs.readFileSync('drizzle/0003_protect_record_writes.sql','utf8'));sql.exec(fs.readFileSync('drizzle/0004_concerned_menace.sql','utf8')); 
 
 
 assert.equal(sql.prepare('SELECT payload FROM records').get().payload,JSON.stringify(legacy));
@@ -61,4 +61,25 @@ assert.equal(companyRecord.data.interestScore,0);
 let olderClient=await post({...companyRecord,data:{...legacy,name:'旧画面からの更新'}});assert.equal(olderClient.status,200);companyRecord=(await olderClient.json()).record;assert.equal(companyRecord.data.interestScore,0);assert.equal(companyRecord.data.applicationCategory,'練習として受けたい');
 let cleared=await post({...companyRecord,data:{...companyRecord.data,interestScore:null}});assert.equal(cleared.status,200);assert.equal((await cleared.json()).record.data.interestScore,null);
 console.log('PASS: score/category persisted, older-client updates preserve both fields, explicit clearing remains possible.');
+
+const {expiresAt,expirationSql}=await import('./'+out+'/retention-time.mjs');
+const {cleanupExpired}=await import('./'+out+'/retention.mjs');
+for(const [start,end] of [['2026-01-31T12:34:56.000+09:00','2026-02-28T12:34:56.000+09:00'],['2028-01-31T00:30:00.000+09:00','2028-02-29T00:30:00.000+09:00'],['2026-12-31T23:30:00.000+09:00','2027-01-31T23:30:00.000+09:00']]){assert.equal(expiresAt(start),Date.parse(end));const v=sql.prepare('SELECT '+expirationSql('?')+' AS n');const count=(expirationSql('?').match(/\?/g)||[]).length;const actual=v.get(...Array(count).fill(start)).n;assert.ok(Math.abs((actual-2440587.5)*86400000-Date.parse(end))<2)}
+const beforeLive=sql.prepare('SELECT id,payload FROM records WHERE deleted=0 ORDER BY id').all();
+const old='2025-01-01T00:00:00.000Z',future='2099-01-01T00:00:00.000Z';
+sql.prepare('INSERT INTO records(id,owner,kind,payload,deleted,deleted_at) VALUES(?,?,?,?,1,?)').run('expired-trash','alice','agent',JSON.stringify(agent),old);
+sql.prepare('INSERT INTO records(id,owner,kind,payload,deleted,deleted_at) VALUES(?,?,?,?,1,?)').run('other-trash','bob','agent',JSON.stringify(agent),old);
+sql.prepare('INSERT INTO records(id,owner,kind,payload,deleted,deleted_at) VALUES(?,?,?,?,1,?)').run('new-trash','alice','agent',JSON.stringify(agent),future);
+const oldDraft={...draft,draftId:crypto.randomUUID(),updatedAt:old};sql.prepare('INSERT INTO drafts VALUES(?,?,?,?,0,?)').run(oldDraft.draftId,'alice',JSON.stringify(oldDraft),1,old);
+await cleanupExpired('alice');assert.deepEqual(sql.prepare('SELECT id,payload FROM records WHERE deleted=0 ORDER BY id').all(),beforeLive);assert.equal(sql.prepare('SELECT payload FROM records WHERE id=?').get('expired-trash').payload,'{}');assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get('expired-trash').deleted,2);assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get('other-trash').deleted,1);assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get('new-trash').deleted,1);assert.equal(sql.prepare('SELECT payload FROM drafts WHERE id=?').get(oldDraft.draftId).payload,'{}');assert.equal((await drafts.POST(request('POST',oldDraft))).status,409);assert.equal((await post({id:'expired-trash',revision:1,kind:'agent',restore:true,data:agent})).status,409);
+writeLocalDraft(local,'alice',oldDraft);assert.equal(readLocalDrafts(local,'alice').some(d=>d.draftId===oldDraft.draftId),false);
+console.log('PASS: calendar month/JST/leap-year retention; saved data unchanged; owner isolation; tombstones; expired retry rejected; local expiry.');
+const backup=await import('./'+out+'/backup.mjs');
+const exportData=await (await backup.GET(new Request('https://app.test/api/backup'))).json();assert.equal(exportData.scope,'saved-records');assert.ok(exportData.records.every(r=>!r.id.includes('trash')));assert.equal(exportData.drafts,undefined);
+const originalCount=sql.prepare('SELECT count(*) AS n FROM records WHERE deleted=0').get().n;
+const imported=await backup.POST(request('POST',exportData));assert.equal(imported.status,200);assert.equal((await imported.json()).added,exportData.records.length);
+const importedAgain=await backup.POST(request('POST',exportData));assert.equal((await importedAgain.json()).added,0);
+const restoredNote=sql.prepare("SELECT payload FROM records WHERE id LIKE 'restored-%' AND kind='note'").get();const linked=JSON.parse(restoredNote.payload).companyId;assert.ok(linked.startsWith('restored-'));assert.equal(sql.prepare('SELECT kind FROM records WHERE id=?').get(linked).kind,'company');
+assert.equal((await backup.POST(request('POST',{...exportData,owner:'bob'}))).status,400);globalThis.testUser=null;assert.equal((await backup.GET(new Request('https://app.test/api/backup'))).status,401);
+console.log('PASS: backup scope/authentication, atomic additive restore, idempotent retries, company relationships preserved.');
 sql.close();

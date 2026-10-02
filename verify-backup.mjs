@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {gunzipSync} from 'node:zlib';
+import {saveSnapshot,validate,digest} from './local-backup/backup-core.mjs';
+const root=await fs.mkdtemp(path.join(os.tmpdir(),'compass-backup-test-'));
+const config={backupDirectory:root,owner:'alice',maxBytes:20000};
+const snap={format:'compass-backup-v1',scope:'saved-records',owner:'alice',exportedAt:new Date().toISOString(),records:[{id:'one',kind:'note',revision:1,data:{content:'日本語の原文\n🙂'.repeat(1000)}}]};
+const first=await saveSnapshot(snap,config);assert.equal(first.changed,true);const decoded=JSON.parse(gunzipSync(await fs.readFile(path.join(root,first.file))));assert.deepEqual(decoded,snap);assert.equal((await saveSnapshot({...snap,exportedAt:'later'},config)).changed,false);
+await assert.rejects(saveSnapshot({...snap,owner:'bob'},config));await assert.rejects(saveSnapshot({...snap,records:[...snap.records,...snap.records]},config));assert.equal((await fs.readdir(root)).length,1);
+const second={...snap,records:[{...snap.records[0],revision:2,data:{content:'違う内容'}}]};const result=await saveSnapshot(second,config);assert.equal(result.changed,true);
+const files=await fs.readdir(root),sizes=await Promise.all(files.map(async f=>(await fs.stat(path.join(root,f))).size));const tight={...config,maxBytes:2000};
+for(let i=3;i<12;i++)await saveSnapshot({...second,records:[{...second.records[0],revision:i}]},tight);
+const retained=await fs.readdir(root);const total=(await Promise.all(retained.map(async f=>(await fs.stat(path.join(root,f))).size))).reduce((a,b)=>a+b,0);assert.ok(total<=tight.maxBytes);assert.ok(retained.length>=2);
+const before=await fs.readdir(root);await assert.rejects(saveSnapshot({...second,records:[{...second.records[0],revision:99}]},{...config,maxBytes:1}));assert.deepEqual(await fs.readdir(root),before);
+assert.throws(()=>validate({...snap,scope:'all'},'alice'));assert.equal(digest(snap),digest({...snap,exportedAt:'different'}));
+console.log('PASS: gzip round-trip, owner/format checks, deduplication, bounded rotation, two valid generations, failure preserves existing backups.');
