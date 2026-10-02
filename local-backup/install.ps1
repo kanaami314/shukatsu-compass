@@ -1,12 +1,12 @@
 $ErrorActionPreference = 'Stop'
 $settings = [Console]::In.ReadToEnd() | ConvertFrom-Json
-$program = Join-Path $env:LOCALAPPDATA 'ShukatsuCompassBackup'
+$program = 'E:\ShukatsuCompassBackup'
 New-Item -ItemType Directory -Force -Path $program | Out-Null
 foreach ($name in @('backup-core.mjs','run-backup.mjs','run-backup.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $program $name) -Force }
 $secure = ConvertTo-SecureString -String $settings.token -AsPlainText -Force
 $config = @{siteUrl=$settings.siteUrl;owner=$settings.owner;encryptedToken=(ConvertFrom-SecureString $secure);backupDirectory='E:\就活コンパスバックアップ';maxBytes=2147483648;nodePath=(Get-Command node).Source}
 $config | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $program 'config.json') -Encoding utf8
-$action=New-ScheduledTaskAction -Execute (Get-Command pwsh).Source -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -File "'+(Join-Path $program 'run-backup.ps1')+'"')
+$action=New-ScheduledTaskAction -Execute ([IO.Path]::GetFullPath((Get-Command pwsh).Source)) -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -File "'+(Join-Path $program 'run-backup.ps1')+'"') -WorkingDirectory $program
 $user=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 $triggers=@((New-ScheduledTaskTrigger -Daily -At '09:00'),(New-ScheduledTaskTrigger -AtLogOn -User $user))
 $taskSettings=New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 10) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 15)
