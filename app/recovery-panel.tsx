@@ -4,7 +4,7 @@ import {Dialog,DialogContent,DialogTitle,DialogDescription} from '@/components/u
 import {Draft,downloadSafetyCopy} from '@/lib/draft-storage';
 import type {RecordItem} from '@/lib/model';
 const names:any={company:'企業',note:'ノート',event:'予定',task:'タスク',agent:'エージェント'};
-const fields:any={name:'名称',title:'タイトル',companyId:'関連企業',agentId:'紹介元',content:'聞いた内容',feeling:'感じたこと',date:'実施日',rating:'印象',memo:'メモ',overview:'企業概要',industry:'業種',status:'選考状況',priority:'優先度',assessment:'判断段階',contact:'連絡先',start:'開始',end:'終了',allDay:'終日',place:'場所',url:'URL',source:'参照元',dueDate:'締切日',dueTime:'締切時刻',done:'完了',relation:'関連先'};
+const fields:any={name:'名称',title:'タイトル',companyId:'関連企業',agentId:'紹介元',content:'聞いた内容',feeling:'感じたこと',date:'実施日',rating:'印象',memo:'メモ',overview:'企業概要',industry:'業種',status:'選考状況',priority:'優先度',interestScore:'志望度スコア',applicationCategory:'応募カテゴリ',assessment:'判断段階',contact:'連絡先',start:'開始',end:'終了',allDay:'終日',place:'場所',url:'URL',source:'参照元',dueDate:'締切日',dueTime:'締切時刻',done:'完了',relation:'関連先'};
 export default function RecoveryPanel({drafts,onResume,onRestore,onRefresh}:{drafts:Draft[];onResume:(d:Draft)=>void;onRestore:(r:RecordItem)=>void;onRefresh:()=>void}){
  const [open,setOpen]=useState(false),[history,setHistory]=useState<any[]>([]),[draftHistory,setDraftHistory]=useState<any[]>([]),[deleted,setDeleted]=useState<any[]>([]),[busy,setBusy]=useState(false),[error,setError]=useState(''),[offset,setOffset]=useState(0),[more,setMore]=useState(false),[imports,setImports]=useState<any[]>([]);
  async function load(next=0){

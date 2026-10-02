@@ -1,0 +1,12 @@
+'use client';
+import {applicationCategories,stages} from '@/lib/model';
+import type {RecordItem} from '@/lib/model';
+import {interestScore,sortByInterest} from '@/lib/company-interest';
+import CompanyPriority from './company-priority';
+import {Table,TableHeader,TableBody,TableRow,TableHead,TableCell} from '@/components/ui/table';
+export default function CompanyInterestViews({companies,mode,onOpen,agentName}:{companies:RecordItem[];mode:'score'|'category';onOpen:(company:RecordItem)=>void;agentName:(id:string)=>string}){
+ const sorted=sortByInterest(companies);
+ const table=(items:RecordItem[],withCategory=false)=><Table><TableHeader><TableRow><TableHead>企業名</TableHead><TableHead>スコア</TableHead><TableHead>志望度・判断段階</TableHead><TableHead>選考状況</TableHead><TableHead>紹介元</TableHead>{withCategory&&<TableHead>応募カテゴリ</TableHead>}</TableRow></TableHeader><TableBody>{items.map(c=><TableRow key={c.id}><TableCell><button className="company-name" onClick={()=>onOpen(c)}><span className="company-avatar">{c.data.name.slice(0,1)}</span><span><b>{c.data.name}</b><small>{c.data.industry||'業種未登録'}</small></span></button></TableCell><TableCell><span className={'interest-score'+(interestScore(c.data)===null?' unset':'')}>{interestScore(c.data)===null?'未設定':<><b>{interestScore(c.data)}</b><small> / 100</small></>}</span></TableCell><TableCell><CompanyPriority data={c.data}/></TableCell><TableCell><span className={'badge status-'+stages.indexOf(c.data.status)}>{c.data.status}</span></TableCell><TableCell>{agentName(c.data.agentId)}</TableCell>{withCategory&&<TableCell><span className="application-category-label">{c.data.applicationCategory||applicationCategories[4]}</span></TableCell>}</TableRow>)}</TableBody></Table>;
+ if(mode==='score')return <section className="interest-view"><p className="interest-help">スコアの高い順に表示します。同点は企業名順、未設定は末尾です。企業名を押すとスコアを編集できます。</p>{sorted.length?table(sorted,true):<p className="interest-empty">表示する企業がありません。企業の登録または絞り込み条件を確認してください。</p>}</section>;
+ return <section className="interest-view"><p className="interest-help">応募の考え方ごとに表示します。各カテゴリ内はスコア順です。未分類の企業は「まだ分からない」に表示します。</p><div className="application-groups">{applicationCategories.map((category,i)=>{const items=sorted.filter(c=>(c.data.applicationCategory||applicationCategories[4])===category);return <details open className={'application-group category-'+i} key={category}><summary><span>{category}</span><span className="count">{items.length}社</span></summary>{items.length?table(items):<p className="interest-empty">このカテゴリの企業はありません。</p>}</details>})}</div></section>;
+}

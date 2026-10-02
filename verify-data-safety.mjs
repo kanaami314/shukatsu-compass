@@ -55,4 +55,10 @@ const {writeLocalDraft,readLocalDrafts,mergeDrafts}=await import(`./${out}/draft
 class MemoryStorage{values=new Map();get length(){return this.values.size}key(i){return [...this.values.keys()][i]??null}getItem(k){return this.values.get(k)??null}setItem(k,v){this.values.set(k,v)}removeItem(k){this.values.delete(k)}}
 const local=new MemoryStorage();writeLocalDraft(local,'alice',draft);assert.deepEqual(readLocalDrafts(local,'alice'),[draft]);assert.deepEqual(readLocalDrafts(local,'bob'),[]);assert.equal(mergeDrafts([{...draft,seq:3}], [draft])[0].seq,3);assert.throws(()=>writeLocalDraft({setItem(){throw new Error('quota')}},'alice',draft));
 console.log('PASS: legacy migration, retry idempotency, revision conflicts (including race), atomic history, soft-delete/restore, reference protection, failed-write rollback, owner isolation, ordered draft sync, archived draft race, local reload recovery and quota failure.');
+globalThis.testUser={userId:'alice'};
+let scored=await post({id:'company',kind:'company',revision:1,data:{...legacy,interestScore:0,applicationCategory:'練習として受けたい'}});assert.equal(scored.status,200);let companyRecord=(await scored.json()).record;
+assert.equal(companyRecord.data.interestScore,0);
+let olderClient=await post({...companyRecord,data:{...legacy,name:'旧画面からの更新'}});assert.equal(olderClient.status,200);companyRecord=(await olderClient.json()).record;assert.equal(companyRecord.data.interestScore,0);assert.equal(companyRecord.data.applicationCategory,'練習として受けたい');
+let cleared=await post({...companyRecord,data:{...companyRecord.data,interestScore:null}});assert.equal(cleared.status,200);assert.equal((await cleared.json()).record.data.interestScore,null);
+console.log('PASS: score/category persisted, older-client updates preserve both fields, explicit clearing remains possible.');
 sql.close();

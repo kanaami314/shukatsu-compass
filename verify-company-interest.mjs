@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import {schemas,applicationCategories} from './lib/model.ts';
+import {interestScore,sortByInterest} from './lib/company-interest.ts';
+const base={name:'企業',industry:'IT',priority:'中',status:'気になる',agentId:'',overview:'',url:'',source:''};
+assert.equal(schemas.company.parse(base).interestScore,undefined);
+for(const score of [0,50,100,null])assert.equal(schemas.company.parse({...base,interestScore:score}).interestScore,score);
+for(const score of [-1,101,1.5,'50',NaN])assert.equal(schemas.company.safeParse({...base,interestScore:score}).success,false);
+for(const category of applicationCategories)assert.equal(schemas.company.parse({...base,applicationCategory:category}).applicationCategory,category);
+assert.equal(schemas.company.safeParse({...base,applicationCategory:'other'}).success,false);
+const list=[{id:'unset',kind:'company',data:{...base,name:'A'}},{id:'zero',kind:'company',data:{...base,name:'B',interestScore:0}},{id:'high',kind:'company',data:{...base,name:'C',interestScore:100}},{id:'tie',kind:'company',data:{...base,name:'D',interestScore:100}},{id:'null',kind:'company',data:{...base,name:'E',interestScore:null}}];
+assert.deepEqual(sortByInterest(list).map(c=>c.id),['high','tie','zero','unset','null']);assert.equal(list[0].id,'unset');assert.equal(interestScore(list[1].data),0);
+console.log('PASS: optional score, 0/100 limits, clearing score, five categories, stable score sorting and unchanged input.');

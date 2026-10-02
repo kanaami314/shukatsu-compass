@@ -18,7 +18,7 @@ export async function POST(req:Request){
   const body:any=await req.json(),kind=body.kind as Kind;if(body.owner&&body.owner!==user.userId)return response({error:'ログイン先が変わりました。元のアカウントで開き直してください。'},409);
   if(!Object.hasOwn(schemas,kind))return response({error:'種類が不正です'},400);
   const result=schemas[kind].safeParse(body.data);if(!result.success)return response({error:result.error.issues.map(i=>i.message).join(' / ')},400);
-  const db=storage(),data=result.data as any,payload=JSON.stringify(data),id=body.id||body.createId;
+  const db=storage(),data=result.data as any,id=body.id||body.createId;let payload=JSON.stringify(data);
   if(typeof id!=='string'||!id||id.length>100)return response({error:'画面を更新して下書きから再開してください。'},400);
   for(const [key,refKind] of [['companyId','company'],['agentId','agent']]){
    if(data[key]&&!await db.prepare('SELECT id FROM records WHERE id = ? AND owner = ? AND kind = ? AND deleted = 0').bind(data[key],user.userId,refKind).first())return response({error:'関連する企業・エージェントが見つかりません。先に復元または関連付けを変更してください。'},400);
@@ -26,6 +26,8 @@ export async function POST(req:Request){
   const existing:any=await db.prepare('SELECT * FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).first();
   if(existing){
    if(existing.kind!==kind)return conflict();
+   // Older tabs and restored drafts must not erase newly introduced company fields.
+   if(kind==='company'){const previous=JSON.parse(existing.payload);for(const key of ['interestScore','applicationCategory'])if(!Object.hasOwn(body.data,key)&&Object.hasOwn(previous,key))data[key]=previous[key];payload=JSON.stringify(data)}
    if(!existing.deleted&&existing.payload===payload)return response({record:record(existing)});
    if(!body.id||!Number.isInteger(body.revision)||body.revision!==existing.revision||(!body.restore&&existing.deleted))return conflict();
    const results=await db.batch([archive(db,id,user.userId,body.revision,existing.payload),db.prepare('UPDATE records SET payload = ?, revision = revision + 1, deleted = 0 WHERE id = ? AND owner = ? AND revision = ? AND payload = ? AND '+refGuard+' RETURNING id').bind(payload,id,user.userId,body.revision,existing.payload,data.companyId||'',data.companyId||'',user.userId,data.agentId||'',data.agentId||'',user.userId)]);
