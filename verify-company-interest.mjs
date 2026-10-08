@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import {schemas,applicationCategories} from './lib/model.ts';
+import {schemas,applicationCategories} from './.sites-runtime/safety-tests/model.mjs';
 import {interestScore,sortByInterest} from './lib/company-interest.ts';
 const base={name:'企業',industry:'IT',priority:'中',status:'気になる',agentId:'',overview:'',url:'',source:''};
 assert.equal(schemas.company.parse(base).interestScore,undefined);

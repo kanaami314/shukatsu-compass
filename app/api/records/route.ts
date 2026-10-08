@@ -1,3 +1,4 @@
+import {loadHolidayCalendar} from '@/lib/holiday-server';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { storage } from '@/lib/storage';
 import { schemas,Kind } from '@/lib/model';
@@ -17,6 +18,7 @@ export async function POST(req:Request){
  try{
   const body:any=await req.json(),kind=body.kind as Kind;if(body.owner&&body.owner!==user.userId)return response({error:'ログイン先が変わりました。元のアカウントで開き直してください。'},409);
   if(!Object.hasOwn(schemas,kind))return response({error:'種類が不正です'},400);
+  if(kind==='event'&&(body.data?.routine||body.data?.schoolCalendar))await loadHolidayCalendar();
   const result=schemas[kind].safeParse(body.data);if(!result.success)return response({error:result.error.issues.map(i=>i.message).join(' / ')},400);
   const db=storage(),data=result.data as any,id=body.id||body.createId;let payload=JSON.stringify(data);
   if(typeof id!=='string'||!id||id.length>100)return response({error:'画面を更新して下書きから再開してください。'},400);
@@ -27,7 +29,7 @@ export async function POST(req:Request){
   if(existing){
    if(existing.kind!==kind||existing.deleted===2)return conflict();
    // Older tabs and restored drafts must not erase newly introduced company fields.
-   if(kind==='company'){const previous=JSON.parse(existing.payload);for(const key of ['interestScore','applicationCategory'])if(!Object.hasOwn(body.data,key)&&Object.hasOwn(previous,key))data[key]=previous[key];payload=JSON.stringify(data)}
+   if(kind==='company'||kind==='event'){const previous=JSON.parse(existing.payload);for(const key of (kind==='company'?['interestScore','applicationCategory']:['routine','schoolCalendar']))if(!Object.hasOwn(body.data,key)&&Object.hasOwn(previous,key))data[key]=previous[key];payload=JSON.stringify(data)}
    if(!existing.deleted&&existing.payload===payload)return response({record:record(existing)});
    if(!body.id||!Number.isInteger(body.revision)||body.revision!==existing.revision||(!body.restore&&existing.deleted))return conflict();
    const results=await db.batch([archive(db,id,user.userId,body.revision,existing.payload),db.prepare('UPDATE records SET payload = ?, revision = revision + 1, deleted = 0, deleted_at = NULL WHERE id = ? AND owner = ? AND revision = ? AND payload = ? AND '+refGuard+' RETURNING id').bind(payload,id,user.userId,body.revision,existing.payload,data.companyId||'',data.companyId||'',user.userId,data.agentId||'',data.agentId||'',user.userId)]);

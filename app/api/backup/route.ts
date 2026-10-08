@@ -1,3 +1,4 @@
+import {loadHolidayCalendar} from '@/lib/holiday-server';
 import {getChatGPTUser} from '@/app/chatgpt-auth';
 import {serviceOwner} from '@/lib/service-auth';
 import {storage} from '@/lib/storage';
@@ -15,6 +16,7 @@ export async function POST(req:Request){
  if(req.headers.get('origin')&&req.headers.get('origin')!==new URL(req.url).origin)return Response.json({error:'Forbidden'},{status:403});
  try{const raw=await req.text();if(raw.length>20*1024*1024)return Response.json({error:'一括復元は20MB以下に対応しています。'},{status:413});
  const snapshot=JSON.parse(raw);if(snapshot.format!=='compass-backup-v1'||snapshot.scope!=='saved-records'||snapshot.owner!==user.userId||!Array.isArray(snapshot.records)||snapshot.records.length>5000)throw Error('このアカウントの保存済みデータのバックアップを選んでください。');
+ if(snapshot.records.some((r:any)=>r.data?.routine||r.data?.schoolCalendar))await loadHolidayCalendar();
  const rows=snapshot.records,ids=new Set<string>();for(const r of rows){if(typeof r.id!=='string'||ids.has(r.id)||!Object.hasOwn(schemas,r.kind))throw Error('ファイルの記録を確認できません。');ids.add(r.id)}
  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(user.userId+JSON.stringify(rows)));const hash=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
  const mapped=new Map<string,string>(rows.map((r:any,i:number)=>[r.id,'restored-'+hash.slice(0,40)+'-'+i]));

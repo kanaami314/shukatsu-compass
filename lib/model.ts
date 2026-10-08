@@ -1,3 +1,4 @@
+import {routineSchema,schoolCalendarSchema} from './routine-schema';
 import { z } from 'zod';
 const calendarDate=z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v=>Number.isFinite(Date.parse(v+'T00:00:00Z'))&&new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v,'有効な日付を入力してください');
 export const stages=['気になる','説明会','書類選考','一次面接','二次面接','最終面接','内定','見送り・辞退'] as const;
@@ -7,13 +8,13 @@ export const schemas={
  agent:z.object({name:z.string().trim().min(1).max(150),contact:z.string().max(500),memo:z.string().max(5000)}),
  note:z.object({companyId:z.string().min(1),date:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),title:z.string().trim().min(1).max(150),content:z.string().max(10000),feeling:z.string().max(10000),rating:z.enum(['5','4','3','2','1'])}),
  task:z.object({title:z.string().trim().min(1).max(150),dueDate:calendarDate,dueTime:z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/).default(''),companyId:z.string().default(''),agentId:z.string().default(''),priority:z.enum(['高','中','低']),done:z.boolean().default(false),memo:z.string().max(5000)}),
- event:z.object({companyId:z.string(),agentId:z.string().default(''),allDay:z.boolean().default(false),title:z.string().trim().min(1).max(150),start:z.string().datetime({offset:true}),end:z.string().datetime({offset:true}),place:z.string().max(1000),memo:z.string().max(5000)}).refine(v=>new Date(v.end)>new Date(v.start),'終了日時は開始日時より後にしてください').refine(v=>!(v.companyId&&v.agentId),'企業とエージェントはどちらか一方を選択してください').refine(v=>!v.allDay||([v.start,v.end].every(t=>(Date.parse(t)+9*3600000)%86400000===0)),'終日予定は日本時間の日付で指定してください')
+ event:z.object({routine:routineSchema.optional(),schoolCalendar:schoolCalendarSchema.optional(),companyId:z.string(),agentId:z.string().default(''),allDay:z.boolean().default(false),title:z.string().trim().min(1).max(150),start:z.string().datetime({offset:true}),end:z.string().datetime({offset:true}),place:z.string().max(1000),memo:z.string().max(5000)}).refine(v=>!(v.routine&&v.schoolCalendar),'予定の種類を確認してください').refine(v=>!(v.routine||v.schoolCalendar)||(!v.companyId&&!v.agentId),'固定予定に企業・エージェントは指定できません').refine(v=>new Date(v.end)>new Date(v.start),'終了日時は開始日時より後にしてください').refine(v=>!(v.companyId&&v.agentId),'企業とエージェントはどちらか一方を選択してください').refine(v=>!v.allDay||([v.start,v.end].every(t=>(Date.parse(t)+9*3600000)%86400000===0)),'終日予定は日本時間の日付で指定してください')
 };
 export type Kind=keyof typeof schemas;
 export type RecordItem={id:string;kind:Kind;data:any;revision?:number};
 export function freeSlots(events:RecordItem[],date:string,duration:number,startHour=9,endHour=20,buffer=30){
  const start=new Date(`${date}T${String(startHour).padStart(2,'0')}:00:00+09:00`).getTime(),end=new Date(`${date}T${String(endHour).padStart(2,'0')}:00:00+09:00`).getTime();
- const busy=events.map(e=>[Date.parse(e.data.start)-(e.data.allDay?0:buffer*60000),Date.parse(e.data.end)+(e.data.allDay?0:buffer*60000)]).filter(([a,b])=>a<end&&b>start).sort((a,b)=>a[0]-b[0]);
+ const busy=events.map(e=>[Date.parse(e.data.start)-(e.data.allDay?0:Math.max(buffer,e.data.before||0)*60000),Date.parse(e.data.end)+(e.data.allDay?0:Math.max(buffer,e.data.after||0)*60000)]).filter(([a,b])=>a<end&&b>start).sort((a,b)=>a[0]-b[0]);
  let cursor=start;const slots:number[][]=[];for(const [a,b] of busy){if(a-cursor>=duration*60000)slots.push([cursor,Math.min(a,end)]);cursor=Math.max(cursor,b)}if(end-cursor>=duration*60000)slots.push([cursor,end]);return slots;
 }
 
