@@ -24,6 +24,7 @@ export default function NoteProofreader({content,feeling,disabled,onApply}:{cont
     <p className="ai-privacy">無料枠では送信内容がGoogleのサービス改善に使われる場合があります。個人情報や非公開の情報を含めないでください。</p>
     {configured===false&&<p role="status">APIキーの接続待ちです。ノートの記入・保存は利用できます。</p>}
     <button type="button" className="secondary" disabled={disabled||busy||configured!==true||(!content.trim()&&!feeling.trim())} onClick={run}>{busy?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {busy?'構成を整理しています…':'構成から整える'}</button>
+    {busy&&<p role="status">混雑時は自動で再試行します。完了まで最大2分半ほどかかる場合があります。原文は採用するまで変更されません。</p>}
     {error&&<p role="alert" className="ai-error">{error}</p>}
     {comparison&&<div className="ai-result" aria-live="polite">
       <p>固有名詞・数字・感想が変わっていないか確認してください。</p>

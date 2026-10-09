@@ -4,14 +4,14 @@ export const proofreadInput = z.object({content:z.string().max(10000),feeling:z.
 const outputSchema=z.object({content:z.string().max(10000),feeling:z.string().max(10000),changes:z.array(z.string().max(300)).max(8)}).strict();
 export type NoteText={content:string;feeling:string};
 export class ProofreadError extends Error {
-  status:number;
-  constructor(message:string,status=502){super(message);this.status=status}
+  status:number; code:string; retryable:boolean; retryAfterMs:number;
+  constructor(message:string,status=502,code='INVALID_RESULT',retryable=false,retryAfterMs=0){super(message);this.status=status;this.code=code;this.retryable=retryable;this.retryAfterMs=retryAfterMs}
 }
-export async function proofread(input:NoteText,key:string,model='gemini-3.6-flash',request:typeof fetch=fetch){
+async function proofreadOnce(input:NoteText,key:string,model='gemini-3.6-flash',request:typeof fetch=fetch,timeoutMs=60000){
   const note=proofreadInput.parse(input);
-  if(!/^gemini-[a-z0-9.-]+$/.test(model))throw new ProofreadError('AIのモデル設定を確認してください。',503);
+  if(!/^gemini-[a-z0-9.-]+$/.test(model))throw new ProofreadError('AIのモデル設定を確認してください。',503,'CONFIGURATION');
   const controller=new AbortController();
-  const timer=setTimeout(()=>controller.abort(),45000);
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
     const response=await request(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,{
       method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':key},signal:controller.signal,
@@ -22,13 +22,22 @@ export async function proofread(input:NoteText,key:string,model='gemini-3.6-flas
       })
     });
     if(!response.ok){
-      if(response.status===429)throw new ProofreadError('Geminiの利用上限に達しました。時間をおいて再度お試しください。',429);
-      if([400,401,403,404].includes(response.status))throw new ProofreadError('Geminiに接続できません。APIキー・モデル・利用制限の設定を確認してください。',503);
-      throw new ProofreadError('Geminiが一時的に利用できません。時間をおいて再度お試しください。',503);
+      if(response.status===429){
+        const detail:any=await response.json().catch(()=>({}));
+        const details=detail.error?.details||[];
+        const daily=details.some((d:any)=>d.violations?.some((v:any)=>/perday|daily/i.test(v.quotaId||'')));
+        const retry=details.find((d:any)=>typeof d.retryDelay==='string')?.retryDelay;
+        const header=response.headers.get('retry-after');
+        const seconds=retry?Number(retry.replace(/s$/,'')):header?(Number.isFinite(Number(header))?Number(header):Math.max(0,(Date.parse(header)-Date.now())/1000)):NaN;
+        const delay=Number.isFinite(seconds)?Math.max(1000,seconds*1000):0;
+        throw new ProofreadError(daily?'Geminiの1日分の利用上限に達しています。上限のリセット後にお試しください。':'Geminiの利用上限に達しています。'+(delay?'約'+Math.ceil(delay/1000)+'秒以上あけてお試しください。':'利用枠の回復後にお試しください。'),429,daily?'DAILY_QUOTA':'RATE_LIMIT',!daily&&delay>0&&delay<=30000,delay);
+      }
+      if([400,401,403,404].includes(response.status))throw new ProofreadError('Geminiに接続できません。APIキー・モデル・利用制限の設定を確認してください。',503,'CONFIGURATION');
+      throw new ProofreadError('Geminiが混雑しているため、再試行しても完了できませんでした。原文は変更していません。',503,'UPSTREAM_'+response.status,[500,502,503,504].includes(response.status));
     }
     const body:any=await response.json();
     const candidate=body.candidates?.[0];
-    if(candidate?.finishReason!=='STOP')throw new ProofreadError('校正結果を最後まで取得できませんでした。文章を短くして再度お試しください。');
+    if(candidate?.finishReason!=='STOP')throw new ProofreadError('校正結果を最後まで取得できませんでした。文章を短くして再度お試しください。',502,'INCOMPLETE');
     const text=candidate.content?.parts?.filter((p:any)=>!p.thought&&typeof p.text==='string').map((p:any)=>p.text).join('');
     let parsed;
     try{parsed=outputSchema.parse(JSON.parse(text))}catch{throw new ProofreadError('校正結果の形式を確認できませんでした。原文は変更していません。')}
@@ -39,6 +48,22 @@ export async function proofread(input:NoteText,key:string,model='gemini-3.6-flas
     return parsed;
   }catch(error){
     if(error instanceof ProofreadError)throw error;
-    throw new ProofreadError(controller.signal.aborted?'校正がタイムアウトしました。時間をおいて再度お試しください。':'AIとの通信に失敗しました。原文は変更していません。',503);
+    throw new ProofreadError(controller.signal.aborted?'校正がタイムアウトしました。時間をおいて再度お試しください。':'AIとの通信に失敗しました。原文は変更していません。',503,controller.signal.aborted?'TIMEOUT':'NETWORK',true);
   }finally{clearTimeout(timer)}
+}
+
+// Retry only temporary failures; never log note text, provider bodies or credentials.
+export async function proofread(input:NoteText,key:string,model='gemini-3.6-flash',request:typeof fetch=fetch,options:{sleep?:(ms:number)=>Promise<void>;timeoutMs?:number}={}){
+ const started=Date.now(),budget=150000,sleep=options.sleep||((ms:number)=>new Promise<void>(resolve=>setTimeout(resolve,ms)));
+ for(let attempt=1;attempt<=3;attempt++){
+  try{return await proofreadOnce(input,key,model,request,Math.min(options.timeoutMs||60000,budget-(Date.now()-started)))}
+  catch(error){
+   if(!(error instanceof ProofreadError))throw error;
+   console.warn('note_restructure_failure',{code:error.code,attempt,elapsedMs:Date.now()-started});
+   const delay=Math.max(error.retryAfterMs,1000*2**(attempt-1)+Math.floor(Math.random()*500));
+   if(!error.retryable||attempt===3||Date.now()-started+delay+10000>=budget)throw error;
+   await sleep(delay);
+  }
+ }
+ throw new ProofreadError('再構成を完了できませんでした。原文は変更していません。');
 }

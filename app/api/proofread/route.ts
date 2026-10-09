@@ -20,5 +20,5 @@ export async function POST(req:Request){
   }catch{return json({error:'入力を確認してください。'},400)}
   if(!body.success)return json({error:'本文を入力してください。各欄は10000文字以内です。'},400);
   try{return json(await proofread(body.data,env.GEMINI_API_KEY,env.GEMINI_MODEL))}
-  catch(error){return json({error:error instanceof ProofreadError?error.message:'校正に失敗しました。'},error instanceof ProofreadError?error.status:503)}
+  catch(error){return json({error:error instanceof ProofreadError?error.message+'（'+error.code+'）':'校正に失敗しました。'},error instanceof ProofreadError?error.status:503)}
 }
