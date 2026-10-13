@@ -1,0 +1,16 @@
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync} from 'node:fs';
+import ts from 'typescript';
+const source=readFileSync('lib/share-images.ts','utf8').replaceAll("'./model'","'./model.mjs'").replaceAll("'./routines'","'./routines.mjs'").replaceAll("'./holidays'","'./holidays.mjs'");
+writeFileSync('.sites-runtime/safety-tests/share-images.mjs',ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);
+const {shareDocument}=await import('./.sites-runtime/safety-tests/share-images.mjs');
+const now=Date.parse('2026-10-13T00:00:00+09:00');
+const records=[{id:'a',kind:'company',data:{name:'公開企業',status:'一次面接',priority:'高',applicationCategory:'秘密カテゴリ',overview:'秘密概要',interestScore:99}},{id:'b',kind:'company',data:{name:'非公開企業',status:'内定'}},{id:'note',kind:'note',data:{content:'秘密ノート'}},...['a','b',''].map((companyId,i)=>({id:'e'+i,kind:'event',data:{companyId,title:'詳細'+i,start:`2026-10-13T${10+i*2}:00:00+09:00`,end:`2026-10-13T${11+i*2}:00:00+09:00`,place:'秘密場所',memo:'秘密メモ'}}))];
+const original=JSON.stringify(records);
+const options={kind:'company',from:'2026-10-13',to:'2026-10-13',selected:['a'],priority:false,category:false,names:true,mode:'list',duration:60,buffer:0,comments:{a:'共有コメント'}};
+let doc=shareDocument(records,options,now),text=JSON.stringify(doc);
+assert.ok(text.includes('公開企業'));assert.ok(text.includes('共有コメント'));for(const hidden of ['非公開企業','秘密','99','詳細'])assert.ok(!text.includes(hidden),hidden);
+doc=shareDocument(records,{...options,kind:'event'},now);text=JSON.stringify(doc);assert.ok(text.includes('詳細0'));assert.ok(text.includes('予定あり'));for(const hidden of ['非公開企業','詳細1','詳細2','秘密'])assert.ok(!text.includes(hidden));
+doc=shareDocument(records,{...options,kind:'event',mode:'free'},now);text=JSON.stringify(doc);for(const hidden of ['企業','詳細','秘密','コメント'])assert.ok(!text.includes(hidden));assert.ok(text.includes('15:00'));assert.ok(!text.includes('09:00 〜 20:00'));
+assert.throws(()=>shareDocument(records,{...options,to:'2027-10-13'},now));assert.throws(()=>shareDocument(records,{...options,selected:[]},now));assert.equal(JSON.stringify(records),original);
+console.log('PASS: field allowlist, selected companies, private event masking, all events block free time, date limits, unchanged source.');
