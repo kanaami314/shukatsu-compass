@@ -27,9 +27,23 @@
 - ローカルUIで設定保存→再読み込みによる保持を確認。
 - HTTP経由で4ツールの公開、停止中の取得拒否、出典ページ200を確認。
 
-## 残作業
-1. Sites公開（所有者限定）、GitHub push。
-2. Sitesが作成するプラグインを接続案内し、可能なら実呼び出し。
+## 公開・接続結果
+- 本番公開成功。アプリ実装コミット: fc3f1b8ed87b23d827a97e4aedf5ed1119893099
+- URL: https://shukatsu-compass-yamas.polite-spool-1598.chatgpt.site/?view=ai
+- Deployment: appgdep_6ad76c455934819183f5a3cc8fe371fe (succeeded, has_mcp=true)
+- Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_cf46886266588191aaa507046f6269a2
+- GitHub origin/masterへ実装push済み。公開範囲は所有者限定を維持。
+- 個人プラグイン一覧から対応プラグインを確認。websiteURLが本番と一致。
+- Plugin ID: plugin_asdk_app_sites_6790e1722c488191a8e339fbe793617d
+- 表示名: 就活コンパス。suggest_pluginsはAlready installedを返した。
+- get_siteのmcp_connectionにURLはあるがplugin_idは未掲載だったため、所有者プラグイン一覧・内容で確認した。
+
+## ユーザー側の次の操作・未検証部分
+1. 本番の左ナビ「ChatGPT連携」で参照範囲を選択、許可をONにして保存（初期OFF）。
+2. 同じアカウントの新しいChatGPTチャットで就活コンパスを選ぶ。
+3. 相談して実データ読み取りを確認。この既存チャットには新ツールがまだ出現せず、ChatGPT経由の実読み取りは未検証。
+- サーバー/API/設定UIは検証済み。接続を有効にした場合のエンドツーエンド確認は次回。
+- このファイルの公開後追記は記録のみで、上記アプリ実装コミットの動作は変わらない。
 
 ## 再開時の注意
 - APIキー・Sites一時認証情報をファイルやログに保存しない。
