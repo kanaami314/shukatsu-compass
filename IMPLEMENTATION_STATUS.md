@@ -55,4 +55,7 @@
 - 全カテゴリの予定名を返す。明示的な個別除外のみ匿名化を維持。
 - エージェント種類を追加。名前・連絡先・メモ、紹介元のID/名称を許可範囲内で取得。
 - 保存済みの種類選択は維持。既存利用者は連携設定でエージェントをチェックして保存。
-- verify-chatgpt.mjs拡張PASS、TypeScript・本番ビルドPASS。公開処理へ。
+- verify-chatgpt.mjs拡張PASS、TypeScript・本番ビルドPASS。本番反映成功。
+- 実装コミット: 828a4ae3d651d19283c5a1742dea2e9429f11d16（GitHub同期済み）
+- Deployment: appgdep_6ad77aebcbb08191a1d27280cb214548 (succeeded, has_mcp=true)
+- Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_9e6028fab8448191bf9abdd46bc6f5a8
