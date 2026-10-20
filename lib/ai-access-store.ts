@@ -5,6 +5,6 @@ export async function readAccess(owner:string){
  return {settings:row?accessSchema.parse(JSON.parse(row.payload)):{...defaultAccess},revision:row?.revision??0};
 }
 export async function readSavedRecords(owner:string){
- const rows=await storage().prepare("SELECT id, kind, payload, revision FROM records WHERE owner = ? AND deleted = 0 AND kind IN ('company','note','task','event')").bind(owner).all();
+ const rows=await storage().prepare("SELECT id, kind, payload, revision FROM records WHERE owner = ? AND deleted = 0 AND kind IN ('company','note','task','event','agent')").bind(owner).all();
  return rows.results.map((r:any)=>({id:r.id,kind:r.kind,data:JSON.parse(r.payload),revision:r.revision}));
 }
