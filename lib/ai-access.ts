@@ -24,7 +24,7 @@ export function visibleRecords(rows:ReadRow[],settings:AccessSettings){
 export function projectRecord(row:ReadRow,rows:ReadRow[],origin:string,settings:AccessSettings):{id:string;kind:string;revision:number;url:string;data:Record<string,any>}{
  const d=row.data;
  const agent=settings.kinds.includes('agent')&&!settings.excludedIds.includes(d.agentId)?rows.find(r=>r.kind==='agent'&&r.id===d.agentId):undefined;
- const keys=row.kind==='company'?['name','industry','status','priority','assessment','interestScore','applicationCategory','overview','url','source']:
+ const keys=row.kind==='company'?['name','industry','businessProfile','status','priority','assessment','interestScore','applicationCategory','overview','url','source']:
  row.kind==='agent'?['name','contact','memo']:
  row.kind==='note'?['companyId','date','title','content','feeling','rating']:['companyId','title','dueDate','dueTime','priority','done','memo'];
  return {id:row.id,kind:row.kind,revision:row.revision??1,url:origin+'/chatgpt/source/'+encodeURIComponent(row.id),

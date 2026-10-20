@@ -59,3 +59,10 @@
 - 実装コミット: 828a4ae3d651d19283c5a1742dea2e9429f11d16（GitHub同期済み）
 - Deployment: appgdep_6ad77aebcbb08191a1d27280cb214548 (succeeded, has_mcp=true)
 - Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_9e6028fab8448191bf9abdd46bc6f5a8
+
+## 企業一覧・事業形態・予定候補（2026-10-21）
+- 見送り・辞退は既定非表示。表示時は末尾、既定ソートはスコア降順（未設定は後）。
+- 企業の事業形態を複数選択、主力1つを区別。旧クライアントからの保存でも保持。
+- 予定名のプリセットを追加。記入済みタイトルの置換確認あり、日時等は変更しない。
+- TypeScript、verify-company-interest、verify-data-safety、verify-chatgpt、本番ビルドPASS。
+- ローカル画面で既定フィルタ/ソート、複数形態・主力、予定プリセットと置換確認を検証済み。公開処理中。

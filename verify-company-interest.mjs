@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {schemas,applicationCategories} from './.sites-runtime/safety-tests/model.mjs';
-import {interestScore,sortByInterest} from './lib/company-interest.ts';
+import {interestScore,sortByInterest,sortCompanies,visibleCompanies} from './lib/company-interest.ts';
 const base={name:'企業',industry:'IT',priority:'中',status:'気になる',agentId:'',overview:'',url:'',source:''};
 assert.equal(schemas.company.parse(base).interestScore,undefined);
 for(const score of [0,50,100,null])assert.equal(schemas.company.parse({...base,interestScore:score}).interestScore,score);
@@ -11,3 +11,19 @@ assert.equal(schemas.company.safeParse({...base,applicationCategory:'other'}).su
 const list=[{id:'unset',kind:'company',data:{...base,name:'A'}},{id:'zero',kind:'company',data:{...base,name:'B',interestScore:0}},{id:'high',kind:'company',data:{...base,name:'C',interestScore:100}},{id:'tie',kind:'company',data:{...base,name:'D',interestScore:100}},{id:'null',kind:'company',data:{...base,name:'E',interestScore:null}}];
 assert.deepEqual(sortByInterest(list).map(c=>c.id),['high','tie','zero','unset','null']);assert.equal(list[0].id,'unset');assert.equal(interestScore(list[1].data),0);
 console.log('PASS: optional score, 0/100 limits, clearing score, five categories, stable score sorting and unchanged input.');
+
+const withdrawn={id:'withdrawn',kind:'company',data:{...base,name:'AA',status:'見送り・辞退',interestScore:100}};
+const withClosed=[withdrawn,...list];
+assert.equal(visibleCompanies(withClosed).some(c=>c.id==='withdrawn'),false);
+assert.equal(visibleCompanies(withClosed,true).length,withClosed.length);
+for(const order of ['score','priority','name'])assert.equal(sortCompanies(withClosed,order).at(-1).id,'withdrawn');
+assert.equal(sortByInterest(withClosed).at(-1).id,'withdrawn');
+assert.equal(withClosed[0].id,'withdrawn');
+const profile={types:['自社開発','SIer','SES'],main:'自社開発'};
+assert.deepEqual(schemas.company.parse({...base,businessProfile:profile}).businessProfile,profile);
+assert.equal(schemas.company.safeParse({...base,businessProfile:{types:['SIer'],main:'SES'}}).success,false);
+assert.equal(schemas.company.safeParse({...base,businessProfile:{types:['SIer','SIer'],main:'SIer'}}).success,false);
+assert.equal(schemas.company.safeParse({...base,businessProfile:{types:['unknown'],main:''}}).success,false);
+assert.deepEqual(schemas.company.parse({...base,businessProfile:{types:[],main:''}}).businessProfile,{types:[],main:''});
+assert.equal(schemas.company.parse(base).businessProfile,undefined);
+console.log('PASS: default hidden withdrawn, withdrawn last in every order, optional multi-business profile, valid main selection and no original mutations.');

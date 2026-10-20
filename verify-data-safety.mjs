@@ -82,4 +82,21 @@ const importedAgain=await backup.POST(request('POST',exportData));assert.equal((
 const restoredNote=sql.prepare("SELECT payload FROM records WHERE id LIKE 'restored-%' AND kind='note'").get();const linked=JSON.parse(restoredNote.payload).companyId;assert.ok(linked.startsWith('restored-'));assert.equal(sql.prepare('SELECT kind FROM records WHERE id=?').get(linked).kind,'company');
 assert.equal((await backup.POST(request('POST',{...exportData,owner:'bob'}))).status,400);globalThis.testUser=null;assert.equal((await backup.GET(new Request('https://app.test/api/backup'))).status,401);
 console.log('PASS: backup scope/authentication, atomic additive restore, idempotent retries, company relationships preserved.');
+
+
+// Business attributes must survive writes from older tabs and backup round trips.
+globalThis.testUser={userId:'alice'};
+const businessData={...legacy,name:'事業形態テスト',businessProfile:{types:['自社開発','SES'],main:'自社開発'}};
+let businessSaved=await post({kind:'company',createId:'business-fixture',data:businessData});assert.equal(businessSaved.status,200);
+let businessRecord=(await businessSaved.json()).record;
+businessSaved=await post({...businessRecord,data:{...legacy,name:'旧画面で名称変更'}});assert.equal(businessSaved.status,200);
+businessRecord=(await businessSaved.json()).record;assert.deepEqual(businessRecord.data.businessProfile,businessData.businessProfile);
+const businessBackup=await (await (await import('./'+out+'/backup.mjs')).GET(new Request('https://app.test/api/backup'))).json();
+assert.deepEqual(businessBackup.records.find(r=>r.id===businessRecord.id).data.businessProfile,businessData.businessProfile);
+assert.equal((await post({...businessRecord,data:{...businessRecord.data,businessProfile:{types:['SES'],main:'SIer'}}})).status,400);
+businessSaved=await post({...businessRecord,data:{...businessRecord.data,businessProfile:{types:[],main:''}}});assert.equal(businessSaved.status,200);
+assert.deepEqual((await businessSaved.json()).record.data.businessProfile,{types:[],main:''});
+assert.equal((await post({...businessRecord,data:businessData})).status,409);
+console.log('PASS: business profile persisted, older-client preservation, backup export, invalid main rejection, explicit clearing and stale-write rejection.');
+
 sql.close();

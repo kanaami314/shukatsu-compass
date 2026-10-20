@@ -1,4 +1,5 @@
 'use client';
+import {BusinessBadges} from './company-business';
 import type {ReactNode} from 'react';
 import {applicationCategories} from '@/lib/model';
 import type {RecordItem} from '@/lib/model';
@@ -10,7 +11,7 @@ export default function CompanyInterestViews({companies,mode,onOpen,agentName,ac
   const active=activeId===c.id,data=active?activeData:c.data;
   const locked=disabled||!!activeId&&!active;
   return <article className={'interest-company '+(active?'is-editing':'')} key={c.id}>
-   <div className="interest-identity">{mode==='score'&&<span className="interest-rank">{interestScore(c.data)===null?'—':String(index+1).padStart(2,'0')}</span>}<div><button className="interest-name" onClick={()=>onOpen(c)}>{c.data.name}</button><p>{c.data.industry||'業種未登録'} · {agentName(c.data.agentId)}</p><span className="badge">{c.data.status}</span></div></div>
+   <div className="interest-identity">{mode==='score'&&<span className="interest-rank">{interestScore(c.data)===null?'—':String(index+1).padStart(2,'0')}</span>}<div><button className="interest-name" onClick={()=>onOpen(c)}>{c.data.name}</button><p>{c.data.industry||'業種未登録'} · {agentName(c.data.agentId)}</p><span className="badge">{c.data.status}</span><BusinessBadges profile={data.businessProfile}/></div></div>
    <fieldset disabled={locked} className="interest-controls"><label className="score-control"><span>志望度スコア</span><div><input aria-label={c.data.name+'の志望度スコア'} type="number" min="0" max="100" step="1" inputMode="numeric" placeholder="未設定" value={data.interestScore??''} onChange={e=>onChange(c,'interestScore',e.target.value===''?null:Number(e.target.value))}/><small>/ 100</small></div><progress max="100" value={data.interestScore??0}/></label>
    <label className="category-control"><span>応募カテゴリ</span><select aria-label={c.data.name+'の応募カテゴリ'} value={data.applicationCategory||applicationCategories[4]} onChange={e=>onChange(c,'applicationCategory',e.target.value)}>{applicationCategories.map(v=><option key={v}>{v}</option>)}</select></label>
    <label><span>志望度</span><select aria-label={c.data.name+'の志望度'} value={data.priority} onChange={e=>onChange(c,'priority',e.target.value)}>{['高','中','低'].map(v=><option key={v}>{v}</option>)}</select></label>
