@@ -65,4 +65,7 @@
 - 企業の事業形態を複数選択、主力1つを区別。旧クライアントからの保存でも保持。
 - 予定名のプリセットを追加。記入済みタイトルの置換確認あり、日時等は変更しない。
 - TypeScript、verify-company-interest、verify-data-safety、verify-chatgpt、本番ビルドPASS。
-- ローカル画面で既定フィルタ/ソート、複数形態・主力、予定プリセットと置換確認を検証済み。公開処理中。
+- ローカル画面で既定フィルタ/ソート、複数形態・主力、予定プリセットと置換確認を検証済み。本番反映成功。
+- 実装コミット: 3e9e67ec9845925eaf9ebe5a15b8cc85a5897f07（GitHub同期済み）
+- Deployment: appgdep_6ad7fc38a7508191a3dc8b3f8763f056 (succeeded, has_mcp=true)
+- Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_b5e33d70557c81918c44f97ae8fb1032
