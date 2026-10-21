@@ -89,3 +89,6 @@
 - 確定時の削除・競合ガードも関連先一致を条件とし、旧データの混在グループを安全に分離。
 - data-safetyに企業間/エージェント/個人の分離検証を追加しPASS。型検査・本番ビルドPASS。
 - ブラウザツールの既知の接続障害のため今回の画面操作確認は未実施。
+- 公開成功: 265a0f2d209bca752fb6b814fde9815a05ab21a4（GitHub同期済み）
+- Deployment: appgdep_6ad84567e4a48191b3d4283ae2f43a22 (succeeded)
+- Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_6c72432cc03481919f3d090df56e0f00
