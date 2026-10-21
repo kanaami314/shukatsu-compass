@@ -108,3 +108,6 @@
 - 利用者の品質優先の要望で、10/13以前のgemini-3.6-flashへ復帰。
 - Flash-Liteへの自動フォールバックを撤去。1回最大50秒、原文保護・比較採用・中止機能を維持。
 - 画面の処理中説明も更新。verify-proofread（模擬API）、型検査PASS。実APIの出力品質は未検証。
+- 本番ビルドPASS・公開成功: 5969655bbc31f7e0d8556fb7e80b90d80b82e303（GitHub同期済み）
+- Deployment: appgdep_6ad923060aec819186e30afb7915cb75 (succeeded)
+- Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_676fc8ffb43c81919574e5c19468df83
