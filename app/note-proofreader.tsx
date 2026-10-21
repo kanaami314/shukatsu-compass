@@ -24,7 +24,7 @@ export default function NoteProofreader({content,feeling,disabled,onApply}:{cont
     <p className="ai-privacy">無料枠では送信内容がGoogleのサービス改善に使われる場合があります。個人情報や非公開の情報を含めないでください。</p>
     {configured===false&&<p role="status">APIキーの接続待ちです。ノートの記入・保存は利用できます。</p>}
     <button type="button" className="secondary" disabled={disabled||busy||configured!==true||(!content.trim()&&!feeling.trim())} onClick={run}>{busy?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {busy?'構成を整理しています…':'構成から整える'}</button>
-    {busy&&<p role="status">通常は数秒〜数十秒で完了します。応答できない場合は別モデルに1回だけ切り替え、最大約50秒で終了します。原文は採用するまで変更されません。</p>}
+    {busy&&<p role="status">通常は数秒〜数十秒で完了します。Gemini 3.6 Flashを使用し、軽量モデルには切り替えません。最大約50秒で終了します。原文は採用するまで変更されません。</p>}
     {busy&&<button type="button" className="secondary" onClick={()=>{controller.current?.abort();setBusy(false);setError('再構成を中止しました。原文は変更していません。')}}>再構成を中止</button>}
     {error&&<p role="alert" className="ai-error">{error}</p>}
     {comparison&&<div className="ai-result" aria-live="polite">

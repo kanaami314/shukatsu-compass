@@ -7,7 +7,7 @@ export class ProofreadError extends Error {
   status:number; code:string; retryable:boolean; retryAfterMs:number;
   constructor(message:string,status=502,code='INVALID_RESULT',retryable=false,retryAfterMs=0){super(message);this.status=status;this.code=code;this.retryable=retryable;this.retryAfterMs=retryAfterMs}
 }
-async function proofreadOnce(input:NoteText,key:string,model='gemini-3.5-flash-lite',request:typeof fetch=fetch,timeoutMs=25000,signal?:AbortSignal){
+async function proofreadOnce(input:NoteText,key:string,model='gemini-3.6-flash',request:typeof fetch=fetch,timeoutMs=50000,signal?:AbortSignal){
   const note=proofreadInput.parse(input);
   if(!/^gemini-[a-z0-9.-]+$/.test(model))throw new ProofreadError('AIのモデル設定を確認してください。',503,'CONFIGURATION');
   const controller=new AbortController();
@@ -53,21 +53,17 @@ async function proofreadOnce(input:NoteText,key:string,model='gemini-3.5-flash-l
   }finally{clearTimeout(timer)}
 }
 
-// One attempt per model, bounded to 50 seconds overall. Never log note text or keys.
-export async function proofread(input:NoteText,key:string,model='gemini-3.5-flash-lite',request:typeof fetch=fetch,options:{timeoutMs?:number;signal?:AbortSignal;fallbackModel?:string}={}){
- const started=Date.now(),models=[...new Set([model,options.fallbackModel||'gemini-3.1-flash-lite'])];
- for(let i=0;i<models.length;i++){
-  if(options.signal?.aborted)throw new ProofreadError('再構成を中止しました。原文は変更していません。',499,'CANCELLED');
-  try{
-   const result=await proofreadOnce(input,key,models[i],request,Math.min(options.timeoutMs||25000,50000-(Date.now()-started)),options.signal);
-   console.info('note_restructure_success',{model:models[i],attempt:i+1,elapsedMs:Date.now()-started});
-   return result;
-  }catch(error){
-   if(!(error instanceof ProofreadError))throw error;
-   console.warn('note_restructure_failure',{code:error.code,model:models[i],attempt:i+1,elapsedMs:Date.now()-started});
-   // Quotas, credentials, validation, safety and user cancellation are not bypassed.
-   if(!error.retryable||error.status===429||i===models.length-1||Date.now()-started>=50000)throw error;
-  }
+// Preserve the requested model's output quality; do not silently fall back to Lite.
+// One attempt, bounded to 50 seconds. Never log note text or keys.
+export async function proofread(input:NoteText,key:string,model='gemini-3.6-flash',request:typeof fetch=fetch,options:{timeoutMs?:number;signal?:AbortSignal}={}){
+ const started=Date.now();
+ if(options.signal?.aborted)throw new ProofreadError('再構成を中止しました。原文は変更していません。',499,'CANCELLED');
+ try{
+  const result=await proofreadOnce(input,key,model,request,Math.min(options.timeoutMs||50000,50000),options.signal);
+  console.info('note_restructure_success',{model,attempt:1,elapsedMs:Date.now()-started});
+  return result;
+ }catch(error){
+  if(error instanceof ProofreadError)console.warn('note_restructure_failure',{code:error.code,model,attempt:1,elapsedMs:Date.now()-started});
+  throw error;
  }
- throw new ProofreadError('再構成を完了できませんでした。原文は変更していません。');
 }
