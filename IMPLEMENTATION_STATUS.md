@@ -79,3 +79,6 @@
 - TypeScript、data-safety（候補確定・競合・rollback・復元追加）、chatgpt、share-images、本番ビルドPASS。
 - UIで仮予定・グループ作成・閉じる3択を確認。再開時にブラウザツール障害で、破棄後UIの確認は未完了。
 - 公開処理中。
+- 公開成功: a6056b04fe9278b7f427965c14ebecd7e38a6ae3（GitHub同期済み）
+- Deployment: appgdep_6ad843a0c2108191bade8a1eded01ef3 (succeeded)
+- Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_7e0ea1ebf8508191af078993c7e8f037
