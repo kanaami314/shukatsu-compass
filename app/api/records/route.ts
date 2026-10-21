@@ -36,7 +36,7 @@ export async function POST(req:Request){
    if(kind==='company'||kind==='event'){const previous=JSON.parse(existing.payload);for(const key of (kind==='company'?['interestScore','applicationCategory','businessProfile']:['routine','schoolCalendar','planning']))if(!Object.hasOwn(body.data,key)&&Object.hasOwn(previous,key))data[key]=previous[key];payload=JSON.stringify(data)}
    if(!existing.deleted&&existing.payload===payload)return response({record:record(existing)});
    if(!body.id||!Number.isInteger(body.revision)||body.revision!==existing.revision||(!body.restore&&existing.deleted))return conflict();
-   if(kind==='event'&&data.planning?.status==='confirmed'&&groupId&&JSON.parse(existing.payload).planning?.status==='tentative'&&!existing.deleted){
+   if(kind==='event'&&data.planning?.status==='confirmed'&&(data.planning?.groupId||data.companyId||data.agentId)&&JSON.parse(existing.payload).planning?.status==='tentative'&&!existing.deleted){
     const removedIds=await confirmEvent(db,user.userId,existing,data,body.confirmCandidates);
     if(removedIds===null)return response({error:'候補の内容が変更されています。確定は行っていません。最新の一覧を読み込み、候補を確認し直してください。'},409);
     return response({record:{id,kind,data,revision:body.revision+1},removedIds});
