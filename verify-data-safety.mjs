@@ -139,5 +139,22 @@ beforeUpdate=()=>sql.prepare('UPDATE records SET revision=revision+1 WHERE id=?'
 assert.equal((await post({...raceA,data:{...raceA.data,planning:{...raceA.data.planning,status:'confirmed'}},confirmCandidates:[{id:raceB.id,revision:1}]})).status,409);
 assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get(raceB.id).deleted,0);
 assert.equal(JSON.parse(sql.prepare('SELECT payload FROM records WHERE id=?').get(raceA.id).payload).planning.status,'tentative');
+// Legacy groups shared across different relations are partitioned without changing data.
+const relationGroup=crypto.randomUUID();
+const relationData={...baseEvent,planning:{...baseEvent.planning,groupId:relationGroup}};
+const companyA=await createEvent({...relationData,companyId:'company'}),companyB=await createEvent({...relationData,companyId:'company'});
+const otherCompany=await createEvent({...relationData,companyId:businessRecord.id});
+const agentEvent=await createEvent({...relationData,agentId:first.id});
+const personal=await createEvent(relationData);
+compile('lib/event-candidates.ts','event-candidates');
+const {candidatePeers}=await import('./'+out+'/event-candidates.mjs');
+assert.deepEqual(candidatePeers([companyA,companyB,otherCompany,agentEvent,personal],companyA.data,companyA.id).map(r=>r.id),[companyB.id]);
+const relationConfirmed=await post({...companyA,data:{...companyA.data,planning:{...companyA.data.planning,status:'confirmed'}},confirmCandidates:[{id:companyB.id,revision:1}]});
+assert.equal(relationConfirmed.status,200,JSON.stringify(await relationConfirmed.clone().json()));
+assert.deepEqual((await relationConfirmed.json()).removedIds,[companyB.id]);
+for(const e of [otherCompany,agentEvent,personal])assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get(e.id).deleted,0);
+assert.equal((await post({kind:'event',createId:crypto.randomUUID(),data:{...relationData,agentId:first.id}})).status,200);
+assert.equal((await post({kind:'event',createId:crypto.randomUUID(),data:{...relationData,companyId:'company'}})).status,409);
+console.log('PASS: candidate groups isolated by company/agent/personal relation in previews, confirmation and resolved-group guards.');
 console.log('PASS: candidate confirmation rollback, revision checks, owner/group isolation, retry, trash restore, legacy preservation, backup group isolation.');
 sql.close();

@@ -27,8 +27,8 @@ export async function POST(req:Request){
    if(data[key]&&!await db.prepare('SELECT id FROM records WHERE id = ? AND owner = ? AND kind = ? AND deleted = 0').bind(data[key],user.userId,refKind).first())return response({error:'関連する企業・エージェントが見つかりません。先に復元または関連付けを変更してください。'},400);
   }
   const groupId=data.planning?.groupId||'';
-  const groupGuard=" AND (? = '' OR NOT EXISTS (SELECT 1 FROM records g WHERE g.owner = ? AND g.kind = 'event' AND g.deleted = 0 AND g.id <> ? AND json_extract(g.payload,'$.planning.groupId') = ? AND json_extract(g.payload,'$.planning.status') = 'confirmed'))";
-  const groupArgs=()=>[data.planning?.groupId||'',user.userId,id,data.planning?.groupId||''];
+  const groupGuard=" AND (? = '' OR NOT EXISTS (SELECT 1 FROM records g WHERE g.owner = ? AND g.kind = 'event' AND g.deleted = 0 AND g.id <> ? AND json_extract(g.payload,'$.planning.groupId') = ? AND coalesce(json_extract(g.payload,'$.companyId'),'') = ? AND coalesce(json_extract(g.payload,'$.agentId'),'') = ? AND json_extract(g.payload,'$.planning.status') = 'confirmed'))";
+  const groupArgs=()=>[data.planning?.groupId||'',user.userId,id,data.planning?.groupId||'',data.companyId||'',data.agentId||''];
   const existing:any=await db.prepare('SELECT * FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).first();
   if(existing){
    if(existing.kind!==kind||existing.deleted===2)return conflict();
