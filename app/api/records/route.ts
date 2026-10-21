@@ -1,3 +1,4 @@
+import {confirmEvent} from '@/lib/confirm-event';
 import {loadHolidayCalendar} from '@/lib/holiday-server';
 import { getChatGPTUser } from '@/app/chatgpt-auth';
 import { storage } from '@/lib/storage';
@@ -25,19 +26,28 @@ export async function POST(req:Request){
   for(const [key,refKind] of [['companyId','company'],['agentId','agent']]){
    if(data[key]&&!await db.prepare('SELECT id FROM records WHERE id = ? AND owner = ? AND kind = ? AND deleted = 0').bind(data[key],user.userId,refKind).first())return response({error:'関連する企業・エージェントが見つかりません。先に復元または関連付けを変更してください。'},400);
   }
+  const groupId=data.planning?.groupId||'';
+  const groupGuard=" AND (? = '' OR NOT EXISTS (SELECT 1 FROM records g WHERE g.owner = ? AND g.kind = 'event' AND g.deleted = 0 AND g.id <> ? AND json_extract(g.payload,'$.planning.groupId') = ? AND json_extract(g.payload,'$.planning.status') = 'confirmed'))";
+  const groupArgs=()=>[data.planning?.groupId||'',user.userId,id,data.planning?.groupId||''];
   const existing:any=await db.prepare('SELECT * FROM records WHERE id = ? AND owner = ?').bind(id,user.userId).first();
   if(existing){
    if(existing.kind!==kind||existing.deleted===2)return conflict();
    // Older tabs and restored drafts must not erase newly introduced company fields.
-   if(kind==='company'||kind==='event'){const previous=JSON.parse(existing.payload);for(const key of (kind==='company'?['interestScore','applicationCategory','businessProfile']:['routine','schoolCalendar']))if(!Object.hasOwn(body.data,key)&&Object.hasOwn(previous,key))data[key]=previous[key];payload=JSON.stringify(data)}
+   if(kind==='company'||kind==='event'){const previous=JSON.parse(existing.payload);for(const key of (kind==='company'?['interestScore','applicationCategory','businessProfile']:['routine','schoolCalendar','planning']))if(!Object.hasOwn(body.data,key)&&Object.hasOwn(previous,key))data[key]=previous[key];payload=JSON.stringify(data)}
    if(!existing.deleted&&existing.payload===payload)return response({record:record(existing)});
    if(!body.id||!Number.isInteger(body.revision)||body.revision!==existing.revision||(!body.restore&&existing.deleted))return conflict();
-   const results=await db.batch([archive(db,id,user.userId,body.revision,existing.payload),db.prepare('UPDATE records SET payload = ?, revision = revision + 1, deleted = 0, deleted_at = NULL WHERE id = ? AND owner = ? AND revision = ? AND payload = ? AND '+refGuard+' RETURNING id').bind(payload,id,user.userId,body.revision,existing.payload,data.companyId||'',data.companyId||'',user.userId,data.agentId||'',data.agentId||'',user.userId)]);
+   if(kind==='event'&&data.planning?.status==='confirmed'&&groupId&&JSON.parse(existing.payload).planning?.status==='tentative'&&!existing.deleted){
+    const removedIds=await confirmEvent(db,user.userId,existing,data,body.confirmCandidates);
+    if(removedIds===null)return response({error:'候補の内容が変更されています。確定は行っていません。最新の一覧を読み込み、候補を確認し直してください。'},409);
+    return response({record:{id,kind,data,revision:body.revision+1},removedIds});
+   }
+   const results=await db.batch([archive(db,id,user.userId,body.revision,existing.payload),db.prepare('UPDATE records SET payload = ?, revision = revision + 1, deleted = 0, deleted_at = NULL WHERE id = ? AND owner = ? AND revision = ? AND payload = ? AND '+refGuard+groupGuard+' RETURNING id').bind(payload,id,user.userId,body.revision,existing.payload,data.companyId||'',data.companyId||'',user.userId,data.agentId||'',data.agentId||'',user.userId,...groupArgs())]);
    if(!results[1].results.length)return conflict();
    return response({record:{id,kind,data,revision:body.revision+1}});
   }
   if(body.id)return conflict();
-  const inserted=await db.prepare('INSERT INTO records (id, owner, kind, payload) SELECT ?, ?, ?, ? WHERE '+refGuard+' RETURNING id').bind(id,user.userId,kind,payload,data.companyId||'',data.companyId||'',user.userId,data.agentId||'',data.agentId||'',user.userId).first();if(!inserted)return conflict();
+  if(kind==='event'&&groupId&&data.planning?.status==='confirmed')return response({error:'候補グループの予定は、いったん仮予定として保存してから確定してください。'},400);
+  const inserted=await db.prepare('INSERT INTO records (id, owner, kind, payload) SELECT ?, ?, ?, ? WHERE '+refGuard+groupGuard+' RETURNING id').bind(id,user.userId,kind,payload,data.companyId||'',data.companyId||'',user.userId,data.agentId||'',data.agentId||'',user.userId,...groupArgs()).first();if(!inserted)return conflict();
   return response({record:{id,kind,data,revision:1}});
  }catch(e){console.error(e);return response({error:'保存を確認できませんでした。入力は残っています。そのまま再試行できます。'},503)}
 }

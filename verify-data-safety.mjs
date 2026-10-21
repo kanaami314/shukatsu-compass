@@ -6,7 +6,8 @@ const out='.sites-runtime/safety-tests';fs.mkdirSync(out,{recursive:true});
 function compile(source,name,replacements=[]){let code=fs.readFileSync(source,'utf8');for(const [a,b] of replacements)code=code.replaceAll(a,b);fs.writeFileSync(`${out}/${name}.mjs`,ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText)}
 compile('lib/holidays.ts','holidays',[["import bundled from './holiday-dates.json';",'const bundled='+fs.readFileSync('lib/holiday-dates.json','utf8')+';']]);compile('lib/routine-schema.ts','routine-schema',[["'./holidays'","'./holidays.mjs'"]]);compile('lib/routines.ts','routines',[["'./holidays'","'./holidays.mjs'"]]);compile('lib/model.ts','model',[["'./routine-schema'","'./routine-schema.mjs'"]]);compile('lib/retention-time.ts','retention-time');compile('lib/retention.ts','retention',[["'./storage'","'./deps.mjs'"],["'./retention-time'","'./retention-time.mjs'"]]);compile('lib/draft-storage.ts','draft-storage',[["'./retention-time'","'./retention-time.mjs'"]]);
 fs.writeFileSync(`${out}/deps.mjs`,'export const getChatGPTUser=async()=>globalThis.testUser; export const storage=()=>globalThis.testDB; export const serviceOwner=async()=>null; export const loadHolidayCalendar=async()=>{};');
-for(const name of ['records','drafts','recovery','backup'])compile(`app/api/${name}/route.ts`,name,[["@/app/chatgpt-auth","./deps.mjs"],["@/lib/storage","./deps.mjs"],["@/lib/model","./model.mjs"],["@/lib/retention-time","./retention-time.mjs"],["@/lib/retention","./retention.mjs"],["@/lib/service-auth","./deps.mjs"],["@/lib/holiday-server","./deps.mjs"]]);
+compile('lib/confirm-event.ts','confirm-event');
+for(const name of ['records','drafts','recovery','backup'])compile(`app/api/${name}/route.ts`,name,[["@/lib/confirm-event","./confirm-event.mjs"],["@/app/chatgpt-auth","./deps.mjs"],["@/lib/storage","./deps.mjs"],["@/lib/model","./model.mjs"],["@/lib/retention-time","./retention-time.mjs"],["@/lib/retention","./retention.mjs"],["@/lib/service-auth","./deps.mjs"],["@/lib/holiday-server","./deps.mjs"]]);
 const sql=new DatabaseSync(':memory:');sql.exec(fs.readFileSync('drizzle/0000_amused_darkhawk.sql','utf8'));
 const legacy={name:'元の企業',industry:'IT',status:'説明会',priority:'中',agentId:'',overview:'原文そのまま',url:'',source:''};
 sql.prepare('INSERT INTO records VALUES (?, ?, ?, ?)').run('company','alice','company',JSON.stringify(legacy));
@@ -17,7 +18,7 @@ sql.exec(fs.readFileSync('drizzle/0003_protect_record_writes.sql','utf8'));sql.e
 
 assert.equal(sql.prepare('SELECT payload FROM records').get().payload,JSON.stringify(legacy));
 let beforeUpdate;
-globalThis.testDB={prepare(query){let args=[];return{bind(...values){args=values;return this},async first(){if(beforeUpdate&&query.startsWith('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}return sql.prepare(query).get(...args)||null},async all(){if(beforeUpdate&&query.startsWith('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}return{results:sql.prepare(query).all(...args)}},async run(){if(beforeUpdate&&query.startsWith('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}const r=sql.prepare(query).run(...args);return{meta:{changes:Number(r.changes)}}}}},async batch(statements){sql.exec('BEGIN');try{const result=await Promise.all(statements.map(s=>s.all()));sql.exec('COMMIT');return result}catch(e){sql.exec('ROLLBACK');throw e}}};
+globalThis.testDB={prepare(query){let args=[];return{bind(...values){args=values;return this},async first(){if(beforeUpdate&&query.includes('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}return sql.prepare(query).get(...args)||null},async all(){if(beforeUpdate&&query.includes('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}return{results:sql.prepare(query).all(...args)}},async run(){if(beforeUpdate&&query.includes('UPDATE records SET payload')){const f=beforeUpdate;beforeUpdate=null;f()}const r=sql.prepare(query).run(...args);return{meta:{changes:Number(r.changes)}}}}},async batch(statements){sql.exec('BEGIN');try{const result=await Promise.all(statements.map(s=>s.all()));sql.exec('COMMIT');return result}catch(e){sql.exec('ROLLBACK');throw e}}};
 globalThis.testUser={userId:'alice'};
 const records=await import(`./${out}/records.mjs`),drafts=await import(`./${out}/drafts.mjs`),recovery=await import(`./${out}/recovery.mjs`);
 const request=(method,body)=>new Request('https://app.test/api/records',{method,headers:{'Content-Type':'application/json','Origin':'https://app.test'},body:JSON.stringify(body)});
@@ -99,4 +100,44 @@ assert.deepEqual((await businessSaved.json()).record.data.businessProfile,{types
 assert.equal((await post({...businessRecord,data:businessData})).status,409);
 console.log('PASS: business profile persisted, older-client preservation, backup export, invalid main rejection, explicit clearing and stale-write rejection.');
 
+
+// Candidate confirmation must be atomic, scoped, revision-checked and recoverable.
+const groupId=crypto.randomUUID();
+const baseEvent={companyId:'',agentId:'',allDay:false,title:'面接候補',start:'2026-11-01T01:00:00Z',end:'2026-11-01T02:00:00Z',place:'',memo:'保持する',planning:{status:'tentative',groupId,groupName:'A社・一次面接'}};
+const createEvent=async(data)=>{const r=await post({kind:'event',createId:crypto.randomUUID(),data});assert.equal(r.status,200,JSON.stringify(await r.clone().json()));return (await r.json()).record};
+const a=await createEvent(baseEvent),b=await createEvent({...baseEvent,start:'2026-11-02T01:00:00Z',end:'2026-11-02T02:00:00Z'});
+const separate=await createEvent({...baseEvent,planning:{...baseEvent.planning,groupId:crypto.randomUUID()}});
+globalThis.testUser={userId:'bob'};const outsider=await createEvent(baseEvent);globalThis.testUser={userId:'alice'};
+const confirm={...a,data:{...a.data,planning:{...a.data.planning,status:'confirmed'}},confirmCandidates:[{id:b.id,revision:b.revision}]};
+assert.equal((await post({...confirm,confirmCandidates:[]})).status,409);
+assert.equal(sql.prepare('SELECT revision FROM records WHERE id=?').get(a.id).revision,1);
+sql.exec("CREATE TRIGGER fail_candidate_update BEFORE UPDATE ON records BEGIN SELECT RAISE(ABORT,'test failure'); END;");
+console.error=()=>{};assert.equal((await post(confirm)).status,503);console.error=log;sql.exec('DROP TRIGGER fail_candidate_update');
+assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get(b.id).deleted,0);
+assert.equal(sql.prepare('SELECT count(*) AS n FROM record_history WHERE record_id=?').get(a.id).n,0);
+response=await post(confirm);assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.deepEqual((await response.json()).removedIds,[b.id]);
+assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get(b.id).deleted,1);
+assert.equal(JSON.parse(sql.prepare('SELECT payload FROM records WHERE id=?').get(a.id).payload).planning.status,'confirmed');
+assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get(separate.id).deleted,0);
+assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get(outsider.id).deleted,0);
+assert.equal(sql.prepare('SELECT count(*) AS n FROM record_history WHERE record_id IN (?,?)').get(a.id,b.id).n,2);
+assert.equal((await post(confirm)).status,200); // Retry cannot delete twice.
+assert.equal((await post({...b,data:{...b.data,planning:{...b.data.planning,status:'confirmed'}},confirmCandidates:[]})).status,409);
+assert.equal((await post({kind:'event',createId:crypto.randomUUID(),data:baseEvent})).status,409); // No additions to a resolved group.
+assert.equal((await post({...b,revision:2,restore:true,data:{...b.data,planning:{...b.data.planning,groupId:'',groupName:''}}})).status,200);
+const oldEvent={...a.data,title:'旧画面の編集'};delete oldEvent.planning;
+assert.equal((await post({...a,revision:2,data:oldEvent})).status,200);
+assert.equal(JSON.parse(sql.prepare('SELECT payload FROM records WHERE id=?').get(a.id).payload).planning.status,'confirmed');
+const backupCandidates=await (await backup.GET(new Request('https://app.test/api/backup'))).json();
+assert.equal((await backup.POST(request('POST',backupCandidates))).status,200);
+const restoredCandidates=sql.prepare("SELECT payload FROM records WHERE id LIKE 'restored-%' AND kind='event'").all().map(r=>JSON.parse(r.payload));
+assert.ok(restoredCandidates.some(d=>d.planning?.groupName==='A社・一次面接'));
+assert.ok(restoredCandidates.every(d=>d.planning?.groupId!==groupId));
+const raceGroup=crypto.randomUUID();
+const raceA=await createEvent({...baseEvent,planning:{...baseEvent.planning,groupId:raceGroup}}),raceB=await createEvent({...baseEvent,planning:{...baseEvent.planning,groupId:raceGroup}});
+beforeUpdate=()=>sql.prepare('UPDATE records SET revision=revision+1 WHERE id=?').run(raceB.id);
+assert.equal((await post({...raceA,data:{...raceA.data,planning:{...raceA.data.planning,status:'confirmed'}},confirmCandidates:[{id:raceB.id,revision:1}]})).status,409);
+assert.equal(sql.prepare('SELECT deleted FROM records WHERE id=?').get(raceB.id).deleted,0);
+assert.equal(JSON.parse(sql.prepare('SELECT payload FROM records WHERE id=?').get(raceA.id).payload).planning.status,'tentative');
+console.log('PASS: candidate confirmation rollback, revision checks, owner/group isolation, retry, trash restore, legacy preservation, backup group isolation.');
 sql.close();

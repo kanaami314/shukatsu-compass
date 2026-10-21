@@ -20,7 +20,9 @@ export async function POST(req:Request){
  const rows=snapshot.records,ids=new Set<string>();for(const r of rows){if(typeof r.id!=='string'||ids.has(r.id)||!Object.hasOwn(schemas,r.kind))throw Error('ファイルの記録を確認できません。');ids.add(r.id)}
  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(user.userId+JSON.stringify(rows)));const hash=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
  const mapped=new Map<string,string>(rows.map((r:any,i:number)=>[r.id,'restored-'+hash.slice(0,40)+'-'+i]));
- const statements=rows.map((r:any)=>{const data={...r.data};for(const [key,kind] of [['companyId','company'],['agentId','agent']])if(data[key]){if(!rows.some((x:any)=>x.id===data[key]&&x.kind===kind))throw Error('関連先が不足しているため復元を中止しました。');data[key]=mapped.get(data[key])}
+ const groupIds=[...new Set<string>(rows.filter((r:any)=>r.kind==='event'&&r.data.planning?.groupId).map((r:any)=>r.data.planning.groupId))];
+ const groupMap=new Map<string,string>();for(const id of groupIds){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(hash+id));const h=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');groupMap.set(id,h.slice(0,8)+'-'+h.slice(8,12)+'-4'+h.slice(13,16)+'-a'+h.slice(17,20)+'-'+h.slice(20,32))}
+ const statements=rows.map((r:any)=>{const data={...r.data};if(r.kind==='event'&&data.planning?.groupId)data.planning={...data.planning,groupId:groupMap.get(data.planning.groupId)};for(const [key,kind] of [['companyId','company'],['agentId','agent']])if(data[key]){if(!rows.some((x:any)=>x.id===data[key]&&x.kind===kind))throw Error('関連先が不足しているため復元を中止しました。');data[key]=mapped.get(data[key])}
  const parsed=schemas[r.kind as Kind].safeParse(data);if(!parsed.success)throw Error('記録の形式を確認できません。');return storage().prepare('INSERT INTO records(id, owner, kind, payload) VALUES(?, ?, ?, ?) ON CONFLICT(id) DO NOTHING RETURNING id').bind(mapped.get(r.id),user.userId,r.kind,JSON.stringify(parsed.data))});
  // Validate all records before the atomic write; retries of the same file do not duplicate data.
  const result=statements.length?await storage().batch(statements):[];

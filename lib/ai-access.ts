@@ -49,7 +49,7 @@ export function scheduleProjection(rows:ReadRow[],settings:AccessSettings,args:z
   const d=r.data,detail=(!d.companyId||companies.has(d.companyId))&&!excluded.has(r.id)&&!excluded.has(d.seriesId)&&!excluded.has(d.agentId);
   const agent=detail&&settings.kinds.includes('agent')?rows.find(a=>a.kind==='agent'&&a.id===d.agentId):undefined;
   return {start:d.start,end:d.end,allDay:!!d.allDay,beforeMinutes:d.allDay?0:Math.max(args.bufferMinutes,d.before||0),afterMinutes:d.allDay?0:Math.max(args.bufferMinutes,d.after||0),
-   ...(detail?{title:d.title,...(d.companyId?{companyName:rows.find(c=>c.kind==='company'&&c.id===d.companyId)?.data.name}:{}),...(agent?{agentId:agent.id,agentName:agent.data.name}:{})}:{title:'予定あり'})};
+   ...(detail?{title:d.title,status:d.planning?.status==='tentative'?'tentative':'confirmed',...(d.companyId?{companyName:rows.find(c=>c.kind==='company'&&c.id===d.companyId)?.data.name}:{}),...(agent?{agentId:agent.id,agentName:agent.data.name}:{})}:{title:'予定あり'})};
  });
  const unknownHolidays=raw.some(r=>r.data.routine?.category==='school')&&args.to>holidayCoverage();
  return {timezone:'Asia/Tokyo',from:args.from,to:args.to,sourceUrl:origin+'/?view=event',events,

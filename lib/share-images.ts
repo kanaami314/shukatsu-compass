@@ -34,7 +34,7 @@ export function shareDocument(records:RecordItem[],o:ShareOptions,now=Date.now()
    result.rows.push({title:date(d),lines:dayEvents.length?dayEvents.map(e=>{
     const company=companies.find(c=>c.id===e.data.companyId);
     const visible=o.names&&company&&!['school','work'].includes(e.data.category);
-    const label=visible?company.data.name+' / '+e.data.title:'予定あり';
+    const label=visible?company.data.name+' / '+(e.data.planning?.status==='tentative'?'(仮) ':'')+e.data.title:'予定あり';
     return (e.data.allDay?'終日':time(Math.max(start,Date.parse(e.data.start)))+'〜'+(Date.parse(e.data.end)>=end?'24:00':time(e.data.end)))+'　'+label;
    }):['登録されている予定なし']});
   }

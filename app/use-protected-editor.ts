@@ -5,9 +5,11 @@ import {Draft,draftPrefix,writeLocalDraft,readLocalDrafts,mergeDrafts} from '@/l
 type Input={id?:string;kind:Draft['kind'];data:any;revision?:number;restore?:boolean};
 export default function useProtectedEditor(owner:string){
  const [editing,setState]=useState<Draft|null>(null),[drafts,setDrafts]=useState<Draft[]>([]),[status,setStatus]=useState(''),[localError,setLocalError]=useState(''),[cloudError,setCloudError]=useState('');
+ const retiring=useRef(new Set<string>());
  const current=useRef<Draft|null>(null),pending=useRef(new Map<string,Draft>()),busy=useRef(false),ownerRef=useRef(owner);ownerRef.current=owner;
  const updateList=(d:Draft)=>setDrafts(v=>mergeDrafts([d],v));
  function persist(d:Draft){
+  if(retiring.current.has(d.draftId))return true;
   if(!ownerRef.current){setLocalError('ログイン状態を確認できません。入力をファイルに退避してください。');return}
   let localSaved=false;
   try{writeLocalDraft(localStorage,ownerRef.current,d);setStatus('この端末に下書きを保存しました。クラウドに同期中…');setLocalError('');localSaved=true}
@@ -51,11 +53,14 @@ export default function useProtectedEditor(owner:string){
   window.addEventListener('beforeunload',warn);window.addEventListener('pagehide',flush);document.addEventListener('visibilitychange',hidden);
   return()=>{window.removeEventListener('beforeunload',warn);window.removeEventListener('pagehide',flush);document.removeEventListener('visibilitychange',hidden)};
  },[owner]);
- async function finish(d:Draft){
+ async function finish(d:Draft,discard=false){
+  retiring.current.add(d.draftId);let completed=true;
   pending.current.delete(d.draftId);
   // Other sessions may still be editing the source draft. Only retire this session.
   const ids=[d.draftId];
-  for(const id of ids){try{const original=id===d.draftId?d:drafts.find(x=>x.draftId===id);if(!original)continue;const r=await fetch('/api/drafts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...original,seq:original.seq+1,archived:true,owner}),signal:AbortSignal.timeout(15000)});const result:any=await r.json();if(!r.ok||!result.archived)throw new Error();localStorage.removeItem(draftPrefix(owner)+id);setDrafts(v=>v.filter(x=>x.draftId!==id))}catch{setCloudError('記録は保存済みですが、下書きの整理が未完了です。下書きは安全のため残しています。')}}
+  for(const id of ids){try{const original=id===d.draftId?d:drafts.find(x=>x.draftId===id);if(!original)continue;const r=await fetch('/api/drafts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...original,seq:original.seq+1,archived:true,owner}),signal:AbortSignal.timeout(15000)});const result:any=await r.json();if(!r.ok||!result.archived)throw new Error();localStorage.removeItem(draftPrefix(owner)+id);setDrafts(v=>v.filter(x=>x.draftId!==id))}catch{completed=false;setCloudError(discard?'下書きの削除を確認できませんでした。入力は保持しています。接続を確認して再試行してください。':'記録は保存済みですが、下書きの整理が未完了です。下書きは安全のため残しています。')}}
+  pending.current.delete(d.draftId);if(!completed){retiring.current.delete(d.draftId);pending.current.set(d.draftId,d)}
+  return completed;
  }
  function resume(d:Draft){const copy={...d,draftId:crypto.randomUUID(),sourceDraft:d.draftId,seq:1,updatedAt:new Date().toISOString()};current.current=copy;setState(copy);persist(copy)}
  function checkpoint(){const d=current.current;if(d){const copy={...d,draftId:crypto.randomUUID(),seq:1,updatedAt:new Date().toISOString()};return persist(copy)}return false}
