@@ -120,3 +120,9 @@
 - iPhoneウィジェット画面、Scriptableコード、小/中/大、仮予定/終日、期限超過、JST、24時間以内の障害時キャッシュ、認証失敗時消去。
 - verify-widget、verify-data-safety、型検査、本番ビルドPASS。ブラウザツール接続障害のため画面操作QA未実施。iPhone実機の見た目・更新は利用者確認待ち。
 - 接続は既定で停止。利用者がiPhoneでキーを発行して設定する。再開時にキーをチャットに貼らせない。
+- 公開成功: 9a60c87daa07ad436858935d381c2992301ac34f（GitHub・Sitesソース同期済み）
+- Deployment: appgdep_6ada32aaf2688191be5a9e871579f99a (succeeded)
+- Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_93bab972160c81919c4e7a65e0968de2
+- 中継URL: https://shukatsu-compass-widget.314159265yy3y.workers.dev/v1/widget
+- 本番中継確認: キーなし401、不正キー401、別パス404、POST405、no-store。利用者の接続キーは未発行。iPhoneで設定待ち。
+- 1.1.1 source helper のルート直下アーカイブ保存はWindows EPERM。outputs/widget-20261023.tar.gzへ変更した正規ヘルパーで成功。旧package-site.shは現バージョンにはない。
