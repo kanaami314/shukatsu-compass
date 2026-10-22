@@ -158,6 +158,7 @@ npm run build
 node node_modules/typescript/bin/tsc --noEmit
 node verify-data-safety.mjs
 node verify-chatgpt.mjs
+node verify-widget.mjs
 node verify-company-interest.mjs
 node verify-share-images.mjs
 ```
@@ -176,3 +177,9 @@ D1のスキーマ変更時は `npm run db:generate` でマイグレーション�
 | `verify-*.mjs` | 機能・データ保護の検証スクリプト |
 
 </details>
+
+## iPhoneのホーム画面で予定を確認
+
+Scriptableを使い、今後7日間の予定と未完了タスクの期限をホーム画面に表示できます。アプリの「iPhoneウィジェット」でコードをコピーし、専用の接続キーを発行します。Windowsで開発・配信でき、Macやパソコンの常時起動は不要です。
+
+アプリ自体は非公開のまま、Cloudflare Workersの読み取り専用中継が必要な情報だけを返します。キーは再発行・停止でき、ノート本文や下書きは共有しません。更新間隔はiOSに依存します。構成・導入・運用の詳細は [widget-relay/README.md](widget-relay/README.md) を参照してください。

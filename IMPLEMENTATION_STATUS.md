@@ -111,3 +111,12 @@
 - 本番ビルドPASS・公開成功: 5969655bbc31f7e0d8556fb7e80b90d80b82e303（GitHub同期済み）
 - Deployment: appgdep_6ad923060aec819186e30afb7915cb75 (succeeded)
 - Version: appgprj_6aa78d50337c8191a091818da2dbe368~appgver_676fc8ffb43c81919574e5c19468df83
+
+## Scriptable iPhoneウィジェット（2026-10-23）
+- Cloudflare OAuth認証完了。専用中継 shukatsu-compass-widget を新規配信。既存Worker・サイト公開範囲は変更なし。
+- /api/widget/settings で認証済み利用者が専用キーを発行/停止。D1はハッシュのみ保持、更新競合ガードあり。
+- /api/widget/feed はキーで所有者を特定し保存済み予定/タスクの許可項目のみ返す。設定停止の競合も再検証。既存データは読み取り専用。
+- 中継は固定宛先・GETのみ・リダイレクト禁止・no-store。Sitesサービス鍵はCloudflare secretに設定済み。iPhoneに渡さない。
+- iPhoneウィジェット画面、Scriptableコード、小/中/大、仮予定/終日、期限超過、JST、24時間以内の障害時キャッシュ、認証失敗時消去。
+- verify-widget、verify-data-safety、型検査、本番ビルドPASS。ブラウザツール接続障害のため画面操作QA未実施。iPhone実機の見た目・更新は利用者確認待ち。
+- 接続は既定で停止。利用者がiPhoneでキーを発行して設定する。再開時にキーをチャットに貼らせない。
